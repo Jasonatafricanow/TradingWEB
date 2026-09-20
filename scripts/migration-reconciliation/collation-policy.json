@@ -1,0 +1,35 @@
+{
+  "format_version": 1,
+  "evidence_status": "reconstructed",
+  "transformation_reason": "Production collation policy normalized surviving utf8mb4 tables without changing original migration files or Drizzle hashes.",
+  "source_collation": "utf8mb4_unicode_ci",
+  "target_collation": "utf8mb4_0900_ai_ci",
+  "affected_migration_range": "0012-0031",
+  "evidence_sources": [
+    "Surviving migration chronology in drizzle/0012_import_receiver.sql through drizzle/0031_pos_purchase_orders.sql.",
+    "Surviving manual repair procedure notes; the generated /tmp/collation_fixes.sql was not preserved."
+  ],
+  "verification_queries": [
+    "SELECT TABLE_NAME, TABLE_COLLATION FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME IN ('import_jobs', 'import_sessions', 'order_payments', 'pos_approval_tokens', 'pos_audit_outbox', 'pos_cash_movements', 'pos_device_audit_logs', 'pos_exchanges', 'pos_idempotency_keys', 'pos_inventory_migration_exceptions', 'pos_operator_sessions', 'pos_refund_items', 'pos_shifts', 'pos_purchase_orders', 'pos_purchase_order_items')",
+    "SELECT TABLE_NAME, COLUMN_NAME, COLLATION_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME IN ('import_jobs', 'import_sessions', 'order_payments', 'pos_approval_tokens', 'pos_audit_outbox', 'pos_cash_movements', 'pos_device_audit_logs', 'pos_exchanges', 'pos_idempotency_keys', 'pos_inventory_migration_exceptions', 'pos_operator_sessions', 'pos_refund_items', 'pos_shifts', 'pos_purchase_orders', 'pos_purchase_order_items') AND COLLATION_NAME IS NOT NULL"
+  ],
+  "reconstructed_conversions": [
+    "import_jobs",
+    "import_sessions",
+    "order_payments",
+    "pos_approval_tokens",
+    "pos_audit_outbox",
+    "pos_cash_movements",
+    "pos_device_audit_logs",
+    "pos_exchanges",
+    "pos_idempotency_keys",
+    "pos_inventory_migration_exceptions",
+    "pos_operator_sessions",
+    "pos_refund_items",
+    "pos_shifts"
+  ],
+  "created_normalized_during_0031": [
+    "pos_purchase_orders",
+    "pos_purchase_order_items"
+  ]
+}

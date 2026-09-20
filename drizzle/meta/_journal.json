@@ -1,0 +1,237 @@
+{
+    "version":  "7",
+    "dialect":  "mysql",
+    "entries":  [
+                    {
+                        "idx":  0,
+                        "version":  "5",
+                        "when":  1779264080615,
+                        "tag":  "0000_legal_malcolm_colcord",
+                        "breakpoints":  true
+                    },
+                    {
+                        "idx":  1,
+                        "version":  "5",
+                        "when":  1779408000000,
+                        "tag":  "0001_schema_improvements",
+                        "breakpoints":  true
+                    },
+                    {
+                        "idx":  2,
+                        "version":  "5",
+                        "when":  1779494400000,
+                        "tag":  "0002_logistics_stores",
+                        "breakpoints":  true
+                    },
+                    {
+                        "idx":  3,
+                        "version":  "7",
+                        "when":  1749484800000,
+                        "tag":  "0003_create_users_table",
+                        "breakpoints":  true
+                    },
+                    {
+                        "idx":  4,
+                        "version":  "7",
+                        "when":  1749484800000,
+                        "tag":  "0004_add_seo_meta_fields",
+                        "breakpoints":  true
+                    },
+                    {
+                        "idx":  5,
+                        "version":  "7",
+                        "when":  1749945600000,
+                        "tag":  "0005_affiliates_settings",
+                        "breakpoints":  true
+                    },
+                    {
+                        "idx":  6,
+                        "version":  "7",
+                        "when":  1750262400000,
+                        "tag":  "0006_payment_methods",
+                        "breakpoints":  true
+                    },
+                    {
+                        "idx":  7,
+                        "version":  "7",
+                        "when":  1750262400000,
+                        "tag":  "0007_delivery_method",
+                        "breakpoints":  true
+                    },
+                    {
+                        "idx":  8,
+                        "version":  "7",
+                        "when":  1750862400000,
+                        "tag":  "0009_delivery_methods",
+                        "breakpoints":  true
+                    },
+                    {
+                        "idx":  9,
+                        "version":  "7",
+                        "when":  1750896000000,
+                        "tag":  "0010_product_types",
+                        "breakpoints":  true
+                    },
+                    {
+                        "idx":  10,
+                        "version":  "7",
+                        "when":  1782259200000,
+                        "tag":  "0011_seed_physical_delivery_method",
+                        "breakpoints":  true
+                    },
+                    {
+                        "idx":  11,
+                        "version":  "7",
+                        "when":  1782262800000,
+                        "tag":  "0012_import_receiver",
+                        "breakpoints":  true
+                    },
+                    {
+                        "idx":  12,
+                        "version":  "7",
+                        "when":  1782266400000,
+                        "tag":  "0013_orders_source",
+                        "breakpoints":  true
+                    },
+                    {
+                        "idx":  13,
+                        "version":  "7",
+                        "when":  1782270000000,
+                        "tag":  "0014_inventory_txn_reference",
+                        "breakpoints":  true
+                    },
+                    {
+                        "idx":  14,
+                        "version":  "7",
+                        "when":  1782273600000,
+                        "tag":  "0015_close_schema_drift",
+                        "breakpoints":  true
+                    },
+                    {
+                        "idx":  15,
+                        "version":  "7",
+                        "when":  1782280800000,
+                        "tag":  "0016_product_operational_fields",
+                        "breakpoints":  true
+                    },
+                    {
+                        "idx":  16,
+                        "version":  "7",
+                        "when":  1782284400000,
+                        "tag":  "0017_variant_barcode",
+                        "breakpoints":  true
+                    },
+                    {
+                        "idx":  17,
+                        "breakpoints":  true,
+                        "when":  1782345600000,
+                        "version":  "7",
+                        "tag":  "0018_url_redirects"
+                    },
+                    {
+                        "idx":  18,
+                        "breakpoints":  true,
+                        "when":  1782432000000,
+                        "version":  "7",
+                        "tag":  "0019_attribution_fields"
+                    },
+                    {
+                        "idx":  19,
+                        "breakpoints":  true,
+                        "when":  1782518400000,
+                        "version":  "7",
+                        "tag":  "0020_whatsapp_clicks"
+                    },
+                    {
+                        "idx":  20,
+                        "breakpoints":  true,
+                        "when":  1782604800000,
+                        "version":  "7",
+                        "tag":  "0021_portuguese_fields"
+                    },
+                    {
+                        "idx":  21,
+                        "breakpoints":  true,
+                        "when":  1782691200000,
+                        "version":  "7",
+                        "tag":  "0022_delivery_zones"
+                    },
+                    {
+                        "idx":  22,
+                        "breakpoints":  true,
+                        "when":  1782777600000,
+                        "version":  "7",
+                        "tag":  "0023_order_delivery_fields"
+                    },
+                    {
+                        "idx":  23,
+                        "breakpoints":  true,
+                        "when":  1782864000000,
+                        "version":  "7",
+                        "tag":  "0024_coupon_campaign_fields"
+                    },
+                    {
+                        "idx":  24,
+                        "breakpoints":  true,
+                        "when":  1782950400000,
+                        "version":  "7",
+                        "tag":  "0025_repair_health_check"
+                    },
+                    {
+                        "idx":  25,
+                        "breakpoints":  true,
+                        "when":  1783968842846,
+                        "version":  "7",
+                        "tag":  "0026_pos_idempotency"
+                    },
+                    {
+                        "idx":  26,
+                        "breakpoints":  true,
+                        "when":  1784073600000,
+                        "version":  "7",
+                        "tag":  "0027_order_payments"
+                    },
+                    {
+                        "idx":  27,
+                        "breakpoints":  true,
+                        "when":  1784160000000,
+                        "version":  "7",
+                        "tag":  "0028_pos_operator_sessions"
+                    },
+                    {
+                        "idx":  28,
+                        "breakpoints":  true,
+                        "when":  1784246400000,
+                        "version":  "7",
+                        "tag":  "0029_pos_exchanges"
+                    },
+                    {
+                        "idx":  29,
+                        "breakpoints":  true,
+                        "when":  1784419200000,
+                        "version":  "7",
+                        "tag":  "0030_pos_shifts_outbox"
+                    },
+                    {
+                        "idx":  30,
+                        "breakpoints":  true,
+                        "when":  1784505600000,
+                        "version":  "7",
+                        "tag":  "0031_pos_purchase_orders"
+                    },
+                    {
+                        "idx":  31,
+                        "breakpoints":  true,
+                        "when":  1784592000000,
+                        "version":  "7",
+                        "tag":  "0032_pos_fulfillment"
+                    },
+                    {
+                        "idx":  32,
+                        "breakpoints":  true,
+                        "when":  1784678400000,
+                        "version":  "7",
+                        "tag":  "0033_add_orders_pos_attribution"
+                    }
+                ]
+}

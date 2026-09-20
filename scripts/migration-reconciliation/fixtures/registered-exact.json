@@ -1,0 +1,4 @@
+{
+  "scenario": "registered-exact",
+  "expected_decision": "REGISTERED_EXACT"
+}

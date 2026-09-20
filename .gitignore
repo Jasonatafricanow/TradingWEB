@@ -1,0 +1,144 @@
+﻿.next
+
+
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Production build
+dist/
+build/
+out/
+.next/
+.open-next/
+.rsbuild/
+
+# Testing
+coverage/
+*.lcov
+.nyc_output
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Diagnostic reports
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# Cache
+.cache/
+.parcel-cache/
+.eslintcache
+.stylelintcache
+.npm
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+node-compile-cache/
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# Temporary files
+*.tmp
+*.temp
+.tmp/
+.temp/
+
+# Optional files
+*.tgz
+*.gz
+*.zip
+*.tar
+
+# TypeScript
+*.tsbuildinfo
+
+# Misc
+.vercel
+.turbo
+
+.coze-logs
+
+# Temporary migration scripts
+scripts/*.mjs
+
+# Backup directories
+src/services-BACKUP*/
+
+# Design source screenshots (large, not part of build)
+*.png
+
+# Temp scripts used during development
+workspace/temp
+source-html/
+
+# Dev-mode image uploads (see src/app/api/upload/image/route.ts)
+/public/uploads/
+
+# Playwright
+/playwright-report/
+/test-results/
+/playwright/.cache/
+
+# CodeGraph IDE data
+.codegraph/
+*.bak
+
+# temp files
+.next-zip.ps1
+.pnpm-store/
+
+# Mimosa security hook state
+.mimosa/
+
+# AI Agent / Dev Harness tools
+.claude/
+.hermes/
+.reasonix/
+.agents/
+.codex/
+.openclaw/
+.superpowers/
+.mimosa/

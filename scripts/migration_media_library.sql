@@ -1,0 +1,12 @@
+CREATE TABLE IF NOT EXISTS media_library (
+  id VARCHAR(36) NOT NULL PRIMARY KEY,
+  filename VARCHAR(255) NOT NULL,
+  original_name VARCHAR(255) NOT NULL,
+  mime_type VARCHAR(100) NOT NULL,
+  size INT NOT NULL DEFAULT 0,
+  url VARCHAR(500) NOT NULL,
+  alt_text VARCHAR(500) DEFAULT NULL,
+  uploaded_by VARCHAR(36) DEFAULT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_ml_uploaded_by (uploaded_by)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

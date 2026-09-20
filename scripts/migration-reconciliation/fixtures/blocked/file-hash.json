@@ -1,0 +1,1 @@
+{"scenario":"file-hash","expected_decision":"BLOCKED","expected_code":"FILE_HASH_MISMATCH"}

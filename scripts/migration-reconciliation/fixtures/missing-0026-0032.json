@@ -1,0 +1,5 @@
+{
+  "scenario": "missing-0026-0032",
+  "expected_decision": "JOURNAL_REPAIR_ELIGIBLE",
+  "missing_suffix": ["0026", "0027", "0028", "0029", "0030", "0031", "0032"]
+}

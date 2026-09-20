@@ -1,0 +1,1 @@
+{"scenario":"collation-drift","expected_decision":"BLOCKED","expected_code":"COLLATION_MISMATCH"}

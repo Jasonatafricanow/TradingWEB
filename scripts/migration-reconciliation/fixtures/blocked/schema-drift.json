@@ -1,0 +1,1 @@
+{"scenario":"schema-drift","expected_decision":"BLOCKED","expected_code":"COLUMN_MISSING"}
