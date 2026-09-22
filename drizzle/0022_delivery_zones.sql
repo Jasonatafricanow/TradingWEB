@@ -17,13 +17,24 @@ CREATE TABLE IF NOT EXISTS `delivery_zones` (
   `updated_at` timestamp NULL,
   CONSTRAINT `delivery_zones_id` PRIMARY KEY (`id`)
 );
+--> statement-breakpoint
 
 SET @db = DATABASE();
+--> statement-breakpoint
 
 SET @exists = (SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'delivery_zones' AND INDEX_NAME = 'dz_active_idx');
+--> statement-breakpoint
 SET @sql = IF(@exists = 0, 'CREATE INDEX dz_active_idx ON delivery_zones (is_active)', 'SELECT "skip" AS s');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+--> statement-breakpoint
+PREPARE stmt FROM @sql;
+--> statement-breakpoint EXECUTE stmt;
+--> statement-breakpoint DEALLOCATE PREPARE stmt;
+--> statement-breakpoint
 
 SET @exists = (SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'delivery_zones' AND INDEX_NAME = 'dz_sort_order_idx');
+--> statement-breakpoint
 SET @sql = IF(@exists = 0, 'CREATE INDEX dz_sort_order_idx ON delivery_zones (sort_order)', 'SELECT "skip" AS s');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+--> statement-breakpoint
+PREPARE stmt FROM @sql;
+--> statement-breakpoint EXECUTE stmt;
+--> statement-breakpoint DEALLOCATE PREPARE stmt;
