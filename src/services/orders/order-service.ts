@@ -3,10 +3,12 @@ import { eq, desc, and, isNull, ne } from 'drizzle-orm';
 import { orders, orderItems, products, productVariants, inventory } from '@/storage/database/shared/schema';
 import { recordOrderPayment } from './order-payment-service';
 import { randomUUID } from 'node:crypto';
-import { validateCoupon } from '@/services/admin/coupon-service';
+import { consumeCouponInTransaction, validateCoupon } from '@/services/admin/coupon-service';
 import { ValidationError } from '@/lib/errors';
 import { emptyToNull, moneyOrZero, dateOrNull, logDbError } from '@/lib/sanitize';
 import { OrderStatus, FinancialStatus, PaymentStatus } from '@/lib/enums';
+import { deductInventoryForOrderInTransaction } from './order-stock-service';
+import { insertOrderTimeline } from './order-timeline';
 
 interface PricedOrderItem {
   id: string;
@@ -327,32 +329,127 @@ export async function updateOrder(orderId: string, updates: Record<string, strin
   return updateOrderStatus(orderId, status, financial_status, fulfillment_status, payment_status, payment_id);
 }
 
+export interface MarkOrderPaidResult {
+  transitioned: boolean;
+  conflict: boolean;
+  order: typeof orders.$inferSelect | null;
+}
+
+interface MarkOrderPaidPayload {
+  payment_id: string;
+  financial_status?: string;
+  source?: string;
+  operator_id?: string | null;
+  store_id?: string | null;
+  /**
+   * True only after an external provider has already confirmed/captured money.
+   * If local finalization fails in that case, persist an explicit conflict
+   * instead of pretending the order is normally paid.
+   */
+  external_payment_confirmed?: boolean;
+}
+
+async function recordPaymentFinalizeConflict(
+  orderId: string,
+  payload: MarkOrderPaidPayload,
+  cause: unknown,
+): Promise<MarkOrderPaidResult> {
+  return db.transaction(async (tx) => {
+    const result = await tx.update(orders).set({
+      status: "payment_conflict",
+      financial_status: payload.financial_status || "paid",
+      payment_status: "paid",
+      payment_id: payload.payment_id,
+      updated_at: new Date(),
+    }).where(and(eq(orders.id, orderId), ne(orders.payment_status, "paid")));
+
+    const affectedRows = (result as unknown as [{ affectedRows: number }, unknown])[0]?.affectedRows ?? 0;
+    const [order] = await tx.select().from(orders).where(eq(orders.id, orderId)).limit(1);
+    if (!order) return { transitioned: false, conflict: false, order: null };
+
+    if (affectedRows >= 1) {
+      await recordOrderPayment({
+        orderId: order.id,
+        channel: order.source === "pos" ? "pos" : "storefront",
+        method: order.payment_method || "unknown",
+        label: order.payment_method || "Unknown",
+        amount: order.total_amount,
+        reference: "payment_finalize_conflict",
+        providerTransactionId: payload.payment_id,
+        status: "recorded",
+        recordedBy: payload.operator_id ?? null,
+      }, tx);
+
+      const reason = cause instanceof Error ? cause.message : String(cause);
+      await insertOrderTimeline({
+        order_id: order.id,
+        action: "payment_conflict",
+        description: `Payment confirmed but local finalization failed (${payload.source ?? "payment"}): ${reason.slice(0, 500)}`,
+        old_value: "unpaid",
+        new_value: "payment_conflict",
+        operator_id: payload.operator_id ?? null,
+      }, tx);
+    }
+
+    const [updated] = await tx.select().from(orders).where(eq(orders.id, orderId)).limit(1);
+    return {
+      transitioned: affectedRows >= 1,
+      conflict: updated?.status === "payment_conflict",
+      order: updated ?? null,
+    };
+  });
+}
+
 /**
- * 原子地把订单从未支付翻到已支付（防 callback/webhook 并发双写）。
+ * Finalize a verified payment as one database transaction.
  *
- * @returns transitioned — 本次调用是否真的执行了状态翻转；
- *          order       — 翻转后（或已翻过）的订单快照。
+ * The order row, inventory allocation, coupon consumption, payment ledger and
+ * timeline commit together. A local failure rolls the transaction back.
+ *
+ * For externally captured payments, a rollback is followed by an explicit
+ * payment_conflict state so the database never presents the order as a normal
+ * paid order without the required local effects.
  */
 export async function markOrderPaidIfNotAlready(
   orderId: string,
-  payload: { payment_id: string; financial_status?: string },
-): Promise<{ transitioned: boolean; order: typeof orders.$inferSelect | null }> {
-  return db.transaction(async (tx) => {
-    const result = await tx
-      .update(orders)
-      .set({
+  payload: MarkOrderPaidPayload,
+): Promise<MarkOrderPaidResult> {
+  try {
+    const result = await db.transaction(async (tx): Promise<MarkOrderPaidResult> => {
+      const update = await tx.update(orders).set({
         status: "paid",
         financial_status: payload.financial_status || "paid",
         payment_status: "paid",
         payment_id: payload.payment_id,
         updated_at: new Date(),
-      })
-      .where(and(eq(orders.id, orderId), ne(orders.payment_status, "paid")));
+      }).where(and(
+        eq(orders.id, orderId),
+        ne(orders.payment_status, "paid"),
+        ne(orders.status, "cancelled"),
+      ));
 
-    const affectedRows = (result as unknown as [{ affectedRows: number }, unknown])[0]?.affectedRows ?? 0;
-    const [order] = await tx.select().from(orders).where(eq(orders.id, orderId)).limit(1);
+      const affectedRows = (update as unknown as [{ affectedRows: number }, unknown])[0]?.affectedRows ?? 0;
+      const [order] = await tx.select().from(orders).where(eq(orders.id, orderId)).limit(1);
+      if (!order) return { transitioned: false, conflict: false, order: null };
 
-    if (affectedRows >= 1 && order) {
+      if (affectedRows < 1) {
+        return {
+          transitioned: false,
+          conflict: order.status === "payment_conflict",
+          order,
+        };
+      }
+
+      const stock = await deductInventoryForOrderInTransaction(order.id, {
+        operatorId: payload.operator_id ?? null,
+        storeId: payload.store_id ?? order.store_id ?? null,
+        source: payload.source ?? "payment",
+      }, tx);
+
+      if (order.coupon_id) {
+        await consumeCouponInTransaction(order.coupon_id, tx);
+      }
+
       await recordOrderPayment({
         orderId: order.id,
         channel: order.source === "pos" ? "pos" : "storefront",
@@ -362,10 +459,45 @@ export async function markOrderPaidIfNotAlready(
         reference: null,
         providerTransactionId: payload.payment_id,
         status: "recorded",
-        recordedBy: null,
+        recordedBy: payload.operator_id ?? null,
       }, tx);
-    }
 
-    return { transitioned: affectedRows >= 1, order: order ?? null };
-  });
+      if (stock.deducted) {
+        await insertOrderTimeline({
+          order_id: order.id,
+          action: "stock_deducted",
+          description: `Inventory allocated for ${stock.items.length} item(s) (${payload.source ?? "payment"})`,
+          operator_id: payload.operator_id ?? null,
+        }, tx);
+      }
+
+      await insertOrderTimeline({
+        order_id: order.id,
+        action: "paid",
+        description: `支付确认(来源: ${payload.source ?? "payment"})`,
+        old_value: "unpaid",
+        new_value: "paid",
+        operator_id: payload.operator_id ?? null,
+      }, tx);
+
+      const [updated] = await tx.select().from(orders).where(eq(orders.id, orderId)).limit(1);
+      return { transitioned: true, conflict: false, order: updated ?? order };
+    });
+
+    if (
+      payload.external_payment_confirmed
+      && result.order
+      && result.order.payment_status !== "paid"
+    ) {
+      return recordPaymentFinalizeConflict(
+        orderId,
+        payload,
+        new Error(`cannot finalize order from status ${result.order.status}`),
+      );
+    }
+    return result;
+  } catch (error) {
+    if (!payload.external_payment_confirmed) throw error;
+    return recordPaymentFinalizeConflict(orderId, payload, error);
+  }
 }
