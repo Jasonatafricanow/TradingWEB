@@ -31,7 +31,7 @@ CREATE TABLE pos_refund_items (
   INDEX pos_refund_items_order_item_idx (order_item_id),
   CONSTRAINT pos_refund_items_refund_fk FOREIGN KEY (refund_id) REFERENCES refunds(id) ON DELETE CASCADE,
   CONSTRAINT pos_refund_items_order_item_fk FOREIGN KEY (order_item_id) REFERENCES order_items(id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB;
 --> statement-breakpoint
 
 CREATE TABLE pos_exchanges (
@@ -51,4 +51,4 @@ CREATE TABLE pos_exchanges (
   INDEX pos_exchanges_replacement_idx (replacement_order_id),
   CONSTRAINT pos_exchanges_original_fk FOREIGN KEY (original_order_id) REFERENCES orders(id),
   CONSTRAINT pos_exchanges_replacement_fk FOREIGN KEY (replacement_order_id) REFERENCES orders(id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB;
