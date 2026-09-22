@@ -107,7 +107,7 @@ export async function applyStaffUpdate(
 type StaffDatabase = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 export async function resolveExplicitStaffUserId(
-  database: StaffDatabase,
+  database: typeof db,
   input: StaffInput,
 ): Promise<string | null> {
   const requestedUserId = input.user_id?.trim() || null;
