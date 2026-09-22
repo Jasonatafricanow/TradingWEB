@@ -193,12 +193,16 @@ export async function POST(request: NextRequest) {
             console.warn("[webhook] Stripe mismatch:", check.reason, check.detail, { orderId, paymentId });
             return NextResponse.json({ received: true, mismatch: check.reason });
           }
-          const { transitioned, order: updated } = await markOrderPaidIfNotAlready(orderId, { payment_id: paymentId });
-          if (transitioned && updated) {
-            const { runOrderPaidSideEffects } = await import("@/services/orders/order-paid-effects");
-            await runOrderPaidSideEffects(updated, { source: "stripe_webhook" });
-          }
-          return NextResponse.json({ received: true, orderId });
+          const finalized = await markOrderPaidIfNotAlready(orderId, {
+            payment_id: paymentId,
+            source: "stripe_webhook",
+            external_payment_confirmed: true,
+          });
+          return NextResponse.json({
+            received: true,
+            orderId,
+            conflict: finalized.conflict || undefined,
+          });
         }
       }
     }
@@ -254,12 +258,16 @@ export async function POST(request: NextRequest) {
             console.warn("[webhook] PayPal mismatch:", check.reason, check.detail, { orderId, captureId });
             return NextResponse.json({ received: true, mismatch: check.reason });
           }
-          const { transitioned, order: updated } = await markOrderPaidIfNotAlready(orderId, { payment_id: result.transactionId || captureId });
-          if (transitioned && updated) {
-            const { runOrderPaidSideEffects } = await import("@/services/orders/order-paid-effects");
-            await runOrderPaidSideEffects(updated, { source: "paypal_webhook" });
-          }
-          return NextResponse.json({ received: true, orderId });
+          const finalized = await markOrderPaidIfNotAlready(orderId, {
+            payment_id: result.transactionId || captureId,
+            source: "paypal_webhook",
+            external_payment_confirmed: true,
+          });
+          return NextResponse.json({
+            received: true,
+            orderId,
+            conflict: finalized.conflict || undefined,
+          });
         }
       }
     }
