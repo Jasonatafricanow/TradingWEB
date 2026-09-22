@@ -5,47 +5,67 @@
 -- (B2-A). Follows the same pattern as existing _en/_ja/_es fields.
 
 SET @db = DATABASE();
+--> statement-breakpoint
 
 -- products.title_pt
 SET @exists = (
   SELECT COUNT(*) FROM information_schema.COLUMNS
   WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'products' AND COLUMN_NAME = 'title_pt'
 );
+--> statement-breakpoint
 SET @sql = IF(@exists = 0,
   'ALTER TABLE products ADD COLUMN title_pt VARCHAR(200) AFTER title_es',
   'SELECT "products.title_pt already exists" AS status'
 );
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+--> statement-breakpoint
+PREPARE stmt FROM @sql;
+--> statement-breakpoint EXECUTE stmt;
+--> statement-breakpoint DEALLOCATE PREPARE stmt;
+--> statement-breakpoint
 
 -- products.description_pt
 SET @exists = (
   SELECT COUNT(*) FROM information_schema.COLUMNS
   WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'products' AND COLUMN_NAME = 'description_pt'
 );
+--> statement-breakpoint
 SET @sql = IF(@exists = 0,
   'ALTER TABLE products ADD COLUMN description_pt TEXT AFTER description_es',
   'SELECT "products.description_pt already exists" AS status'
 );
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+--> statement-breakpoint
+PREPARE stmt FROM @sql;
+--> statement-breakpoint EXECUTE stmt;
+--> statement-breakpoint DEALLOCATE PREPARE stmt;
+--> statement-breakpoint
 
 -- products.meta_title_pt
 SET @exists = (
   SELECT COUNT(*) FROM information_schema.COLUMNS
   WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'products' AND COLUMN_NAME = 'meta_title_pt'
 );
+--> statement-breakpoint
 SET @sql = IF(@exists = 0,
   'ALTER TABLE products ADD COLUMN meta_title_pt VARCHAR(200) AFTER meta_title',
   'SELECT "products.meta_title_pt already exists" AS status'
 );
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+--> statement-breakpoint
+PREPARE stmt FROM @sql;
+--> statement-breakpoint EXECUTE stmt;
+--> statement-breakpoint DEALLOCATE PREPARE stmt;
+--> statement-breakpoint
 
 -- products.meta_description_pt
 SET @exists = (
   SELECT COUNT(*) FROM information_schema.COLUMNS
   WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'products' AND COLUMN_NAME = 'meta_description_pt'
 );
+--> statement-breakpoint
 SET @sql = IF(@exists = 0,
   'ALTER TABLE products ADD COLUMN meta_description_pt TEXT AFTER meta_description',
   'SELECT "products.meta_description_pt already exists" AS status'
 );
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+--> statement-breakpoint
+PREPARE stmt FROM @sql;
+--> statement-breakpoint EXECUTE stmt;
+--> statement-breakpoint DEALLOCATE PREPARE stmt;
