@@ -106,6 +106,26 @@ export async function applyStaffUpdate(
 
 type StaffDatabase = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0];
 
+async function resolveExplicitStaffUserId(
+  database: StaffDatabase,
+  input: StaffInput,
+): Promise<string | null> {
+  const requestedUserId = input.user_id?.trim() || null;
+  if (!requestedUserId) return null;
+
+  const [rows] = await database.$client.execute(
+    'SELECT id, email, is_active FROM users WHERE id = ? LIMIT 1',
+    [requestedUserId],
+  );
+  const user = (rows as { id: string; email: string; is_active: boolean | number }[])[0];
+  if (!user) throw new Error('绑定用户不存在');
+  if (!Boolean(user.is_active)) throw new Error('绑定用户已禁用');
+  if (user.email.trim().toLowerCase() !== input.email.trim().toLowerCase()) {
+    throw new Error('员工邮箱必须与绑定用户邮箱一致');
+  }
+  return user.id;
+}
+
 function databaseRepository(database: StaffDatabase): StaffUpdateRepository {
   return {
     async findSecuritySnapshot(id) {
@@ -170,16 +190,10 @@ export async function createStaff(input: StaffInput) {
     if (existing) throw new Error('该邮箱已被注册为员工');
 
     const id = randomUUID();
-    // 查找是否已有同名邮箱的 users 记录
-    let userId: string | null = null
-    try {
-      const [userRows] = await db.$client.execute(
-        'SELECT id FROM users WHERE email = ? LIMIT 1',
-        [input.email]
-      )
-      const users = userRows as { id: string }[]
-      if (users.length > 0) userId = users[0].id
-    } catch { /* users table may not exist */ }
+    // Security boundary: staff identity is never inferred from email.
+    // A staff row is unbound unless an administrator explicitly supplies
+    // an existing active user_id whose email matches this staff record.
+    const userId = await resolveExplicitStaffUserId(db, input);
 
     await db.insert(staff).values({
       id,
