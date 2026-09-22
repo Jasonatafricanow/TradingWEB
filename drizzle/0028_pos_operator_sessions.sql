@@ -2,36 +2,68 @@
 -- Raw tokens are returned once; only SHA-256 hashes are persisted.
 
 SET @db = DATABASE();
+--> statement-breakpoint
 
 SET @exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='staff' AND COLUMN_NAME='pos_enabled');
+--> statement-breakpoint
 SET @sql = IF(@exists=0, 'ALTER TABLE staff ADD COLUMN pos_enabled BOOLEAN NOT NULL DEFAULT FALSE', 'SELECT "skip" AS s');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+--> statement-breakpoint
+PREPARE stmt FROM @sql;
+--> statement-breakpoint EXECUTE stmt;
+--> statement-breakpoint DEALLOCATE PREPARE stmt;
+--> statement-breakpoint
 
 SET @exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='staff' AND COLUMN_NAME='pos_pin_hash');
+--> statement-breakpoint
 SET @sql = IF(@exists=0, 'ALTER TABLE staff ADD COLUMN pos_pin_hash VARCHAR(255) NULL', 'SELECT "skip" AS s');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+--> statement-breakpoint
+PREPARE stmt FROM @sql;
+--> statement-breakpoint EXECUTE stmt;
+--> statement-breakpoint DEALLOCATE PREPARE stmt;
+--> statement-breakpoint
 
 SET @exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='staff' AND COLUMN_NAME='pos_permissions');
+--> statement-breakpoint
 SET @sql = IF(@exists=0, 'ALTER TABLE staff ADD COLUMN pos_permissions JSON NULL', 'SELECT "skip" AS s');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+--> statement-breakpoint
+PREPARE stmt FROM @sql;
+--> statement-breakpoint EXECUTE stmt;
+--> statement-breakpoint DEALLOCATE PREPARE stmt;
+--> statement-breakpoint
 
 SET @exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='staff' AND COLUMN_NAME='pos_pin_failed_attempts');
+--> statement-breakpoint
 SET @sql = IF(@exists=0, 'ALTER TABLE staff ADD COLUMN pos_pin_failed_attempts INT NOT NULL DEFAULT 0', 'SELECT "skip" AS s');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+--> statement-breakpoint
+PREPARE stmt FROM @sql;
+--> statement-breakpoint EXECUTE stmt;
+--> statement-breakpoint DEALLOCATE PREPARE stmt;
+--> statement-breakpoint
 
 SET @exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='staff' AND COLUMN_NAME='pos_pin_last_failed_at');
+--> statement-breakpoint
 SET @sql = IF(@exists=0, 'ALTER TABLE staff ADD COLUMN pos_pin_last_failed_at TIMESTAMP NULL', 'SELECT "skip" AS s');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+--> statement-breakpoint
+PREPARE stmt FROM @sql;
+--> statement-breakpoint EXECUTE stmt;
+--> statement-breakpoint DEALLOCATE PREPARE stmt;
+--> statement-breakpoint
 
 SET @exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='staff' AND COLUMN_NAME='pos_pin_locked_until');
+--> statement-breakpoint
 SET @sql = IF(@exists=0, 'ALTER TABLE staff ADD COLUMN pos_pin_locked_until TIMESTAMP NULL', 'SELECT "skip" AS s');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+--> statement-breakpoint
+PREPARE stmt FROM @sql;
+--> statement-breakpoint EXECUTE stmt;
+--> statement-breakpoint DEALLOCATE PREPARE stmt;
+--> statement-breakpoint
 
 SET @named_index = (
   SELECT COUNT(*) FROM information_schema.STATISTICS
   WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'staff'
     AND INDEX_NAME = 'staff_pos_store_enabled_active_idx'
 );
+--> statement-breakpoint
 SET @exact_index = (
   SELECT COUNT(*) FROM information_schema.STATISTICS
   WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'staff'
@@ -43,12 +75,17 @@ SET @exact_index = (
       OR (SEQ_IN_INDEX = 3 AND COLUMN_NAME = 'is_active')
     )
 );
+--> statement-breakpoint
 SET @sql = IF(
   @named_index > 0 AND NOT (@named_index = 3 AND @exact_index = 3),
   'DROP INDEX staff_pos_store_enabled_active_idx ON staff',
   'SELECT "skip" AS s'
 );
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+--> statement-breakpoint
+PREPARE stmt FROM @sql;
+--> statement-breakpoint EXECUTE stmt;
+--> statement-breakpoint DEALLOCATE PREPARE stmt;
+--> statement-breakpoint
 
 SET @exact_index = (
   SELECT COUNT(*) FROM information_schema.STATISTICS
@@ -61,8 +98,13 @@ SET @exact_index = (
       OR (SEQ_IN_INDEX = 3 AND COLUMN_NAME = 'is_active')
     )
 );
+--> statement-breakpoint
 SET @sql = IF(@exact_index=0, 'CREATE INDEX staff_pos_store_enabled_active_idx ON staff (store_id, pos_enabled, is_active)', 'SELECT "skip" AS s');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+--> statement-breakpoint
+PREPARE stmt FROM @sql;
+--> statement-breakpoint EXECUTE stmt;
+--> statement-breakpoint DEALLOCATE PREPARE stmt;
+--> statement-breakpoint
 
 CREATE TABLE IF NOT EXISTS pos_operator_sessions (
   id VARCHAR(36) NOT NULL DEFAULT (UUID()) PRIMARY KEY,
@@ -79,6 +121,7 @@ CREATE TABLE IF NOT EXISTS pos_operator_sessions (
   INDEX pos_operator_sessions_staff_idx (staff_id, expires_at),
   INDEX pos_operator_sessions_device_idx (device_id, revoked_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+--> statement-breakpoint
 
 CREATE TABLE IF NOT EXISTS pos_approval_tokens (
   id VARCHAR(36) NOT NULL DEFAULT (UUID()) PRIMARY KEY,
