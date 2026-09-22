@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS delivery_methods (
   KEY idx_code (code),
   KEY idx_active (is_active)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+--> statement-breakpoint
 
 INSERT IGNORE INTO delivery_methods (code, label, label_en, applicable_types, sort_order) VALUES
   ('online', '在线交付', 'Online Delivery', JSON_ARRAY('service', 'virtual'), 1),
