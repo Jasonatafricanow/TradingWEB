@@ -2,6 +2,7 @@
 import { and, desc, eq, like, or, sql } from 'drizzle-orm';
 import { coupons } from '@/storage/database/shared/schema';
 import { randomUUID } from 'node:crypto';
+import type { DbTx } from '@/services/orders/order-pricing-service';
 
 export interface Coupon {
   id: string
@@ -242,17 +243,28 @@ export async function validateCoupon(code: string, orderAmount: number): Promise
   }
 }
 
-export async function consumeCoupon(id: string) {
-  try {
-    const [current] = await db.select({ used_count: coupons.used_count }).from(coupons)
-      .where(eq(coupons.id, id)).limit(1);
-    if (!current) throw new Error('优惠券不存在');
+export async function consumeCouponInTransaction(id: string, tx: DbTx) {
+  const [current] = await tx.select({
+    used_count: coupons.used_count,
+    usage_limit: coupons.usage_limit,
+    is_active: coupons.is_active,
+    expires_at: coupons.expires_at,
+  }).from(coupons).where(eq(coupons.id, id)).for("update").limit(1);
 
-    await db.update(coupons).set({ used_count: (current.used_count || 0) + 1 })
-      .where(eq(coupons.id, id));
-  } catch (error) {
-    throw error;
+  if (!current) throw new Error("优惠券不存在");
+  if (!current.is_active) throw new Error("优惠券已失效");
+  if (current.expires_at && current.expires_at < new Date()) throw new Error("优惠券已过期");
+  if ((current.usage_limit ?? 0) > 0 && (current.used_count ?? 0) >= (current.usage_limit ?? 0)) {
+    throw new Error("优惠券已达使用上限");
   }
+
+  await tx.update(coupons)
+    .set({ used_count: (current.used_count ?? 0) + 1 })
+    .where(eq(coupons.id, id));
+}
+
+export async function consumeCoupon(id: string) {
+  return db.transaction((tx) => consumeCouponInTransaction(id, tx));
 }
 
 export interface CouponCampaignStats {
