@@ -14,6 +14,7 @@ CREATE TABLE pos_shifts (
   closed_at TIMESTAMP NULL,
   INDEX pos_shifts_store_status_idx (store_id, status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+--> statement-breakpoint
 
 CREATE TABLE pos_cash_movements (
   id VARCHAR(36) NOT NULL DEFAULT (UUID()) PRIMARY KEY,
@@ -28,6 +29,7 @@ CREATE TABLE pos_cash_movements (
   INDEX pos_cash_movements_shift_idx (shift_id, created_at),
   CONSTRAINT pos_cash_movements_shift_fk FOREIGN KEY (shift_id) REFERENCES pos_shifts(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+--> statement-breakpoint
 
 CREATE TABLE pos_audit_outbox (
   id VARCHAR(36) NOT NULL DEFAULT (UUID()) PRIMARY KEY,
@@ -45,6 +47,7 @@ CREATE TABLE pos_audit_outbox (
   INDEX pos_audit_outbox_status_idx (status, next_attempt_at),
   INDEX pos_audit_outbox_entity_idx (entity_type, entity_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+--> statement-breakpoint
 
 CREATE TABLE pos_device_audit_logs (
   id VARCHAR(36) NOT NULL PRIMARY KEY,
@@ -61,33 +64,69 @@ CREATE TABLE pos_device_audit_logs (
   uploaded_at TIMESTAMP(3) NOT NULL,
   INDEX pos_device_audit_logs_device_idx (device_id, uploaded_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+--> statement-breakpoint
 
 SET @db = DATABASE();
+--> statement-breakpoint
 
 SET @exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'pos_exchanges' AND COLUMN_NAME = 'refund_id');
+--> statement-breakpoint
 SET @sql = IF(@exists = 0, 'ALTER TABLE pos_exchanges ADD COLUMN refund_id VARCHAR(36) NULL AFTER replacement_order_id', 'SELECT "skip" AS s');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+--> statement-breakpoint
+PREPARE stmt FROM @sql;
+--> statement-breakpoint EXECUTE stmt;
+--> statement-breakpoint DEALLOCATE PREPARE stmt;
+--> statement-breakpoint
 
 SET @exists = (SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'pos_exchanges' AND INDEX_NAME = 'pos_exchanges_refund_unique');
+--> statement-breakpoint
 SET @sql = IF(@exists = 0, 'CREATE UNIQUE INDEX pos_exchanges_refund_unique ON pos_exchanges (refund_id)', 'SELECT "skip" AS s');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+--> statement-breakpoint
+PREPARE stmt FROM @sql;
+--> statement-breakpoint EXECUTE stmt;
+--> statement-breakpoint DEALLOCATE PREPARE stmt;
+--> statement-breakpoint
 
 SET @exists = (SELECT COUNT(*) FROM information_schema.REFERENTIAL_CONSTRAINTS WHERE BINARY CONSTRAINT_SCHEMA = BINARY @db AND TABLE_NAME = 'pos_exchanges' AND CONSTRAINT_NAME = 'pos_exchanges_refund_fk');
+--> statement-breakpoint
 SET @sql = IF(@exists = 0, 'ALTER TABLE pos_exchanges ADD CONSTRAINT pos_exchanges_refund_fk FOREIGN KEY (refund_id) REFERENCES refunds(id)', 'SELECT "skip" AS s');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+--> statement-breakpoint
+PREPARE stmt FROM @sql;
+--> statement-breakpoint EXECUTE stmt;
+--> statement-breakpoint DEALLOCATE PREPARE stmt;
+--> statement-breakpoint
 
 SET @exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'orders' AND COLUMN_NAME = 'shift_id');
+--> statement-breakpoint
 SET @sql = IF(@exists = 0, 'ALTER TABLE orders ADD COLUMN shift_id VARCHAR(36) NULL AFTER store_id', 'SELECT "skip" AS s');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+--> statement-breakpoint
+PREPARE stmt FROM @sql;
+--> statement-breakpoint EXECUTE stmt;
+--> statement-breakpoint DEALLOCATE PREPARE stmt;
+--> statement-breakpoint
 
 SET @exists = (SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'orders' AND INDEX_NAME = 'orders_shift_id_idx');
+--> statement-breakpoint
 SET @sql = IF(@exists = 0, 'CREATE INDEX orders_shift_id_idx ON orders (shift_id)', 'SELECT "skip" AS s');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+--> statement-breakpoint
+PREPARE stmt FROM @sql;
+--> statement-breakpoint EXECUTE stmt;
+--> statement-breakpoint DEALLOCATE PREPARE stmt;
+--> statement-breakpoint
 
 SET @exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'refunds' AND COLUMN_NAME = 'shift_id');
+--> statement-breakpoint
 SET @sql = IF(@exists = 0, 'ALTER TABLE refunds ADD COLUMN shift_id VARCHAR(36) NULL AFTER order_item_id', 'SELECT "skip" AS s');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+--> statement-breakpoint
+PREPARE stmt FROM @sql;
+--> statement-breakpoint EXECUTE stmt;
+--> statement-breakpoint DEALLOCATE PREPARE stmt;
+--> statement-breakpoint
 
 SET @exists = (SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'refunds' AND INDEX_NAME = 'refunds_shift_id_idx');
+--> statement-breakpoint
 SET @sql = IF(@exists = 0, 'CREATE INDEX refunds_shift_id_idx ON refunds (shift_id)', 'SELECT "skip" AS s');
-PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+--> statement-breakpoint
+PREPARE stmt FROM @sql;
+--> statement-breakpoint EXECUTE stmt;
+--> statement-breakpoint DEALLOCATE PREPARE stmt;
