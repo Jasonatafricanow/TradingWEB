@@ -3,7 +3,6 @@ import { eq, desc } from 'drizzle-orm';
 import { orders, shipments } from '@/storage/database/shared/schema';
 import { randomUUID } from 'node:crypto';
 import { markOrderPaidIfNotAlready } from '@/services/orders/order-service';
-import { runOrderPaidSideEffects } from '@/services/orders/order-paid-effects';
 import { restoreInventoryForOrder } from '@/services/orders/order-stock-service';
 import { addOrderTimeline } from '@/services/orders/order-timeline';
 import { createRefund } from './refund-service';
@@ -39,20 +38,32 @@ export async function markPaidAction(orderId: string, operator: Operator) {
   if (!existing) throw new OrderActionError('Order not found', 404);
   if (existing.status === 'cancelled') throw new OrderActionError('已取消订单不能确认收款', 409);
 
-  const { transitioned, order } = await markOrderPaidIfNotAlready(orderId, {
-    payment_id: `manual:${operator.id}`,
-  });
-  if (!transitioned || !order) {
-    return { order: order ?? existing, changed: false };
+  let finalized;
+  try {
+    finalized = await markOrderPaidIfNotAlready(orderId, {
+      payment_id: `manual:${operator.id}`,
+      source: 'admin_mark_paid',
+      operator_id: operator.id,
+      external_payment_confirmed: false,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Payment finalization failed';
+    throw new OrderActionError(message, 409);
   }
 
-  await runOrderPaidSideEffects(order, { source: 'admin_mark_paid', operatorId: operator.id });
+  if (finalized.conflict) {
+    throw new OrderActionError('订单已进入支付冲突状态，需要人工处理', 409);
+  }
+  if (!finalized.transitioned || !finalized.order) {
+    return { order: finalized.order ?? existing, changed: false };
+  }
+
   await audit(operator, 'order.mark_paid', orderId, {
-    order_no: order.order_no,
+    order_no: finalized.order.order_no,
     old_payment_status: existing.payment_status,
     new_payment_status: 'paid',
   });
-  return { order, changed: true };
+  return { order: finalized.order, changed: true };
 }
 
 /** 取消订单;已扣库存则幂等回补 */
