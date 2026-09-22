@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS `users` (
   UNIQUE KEY `users_email_unique` (`email`),
   KEY `users_email_idx` (`email`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+--> statement-breakpoint
 
 SET @profiles_exists := (
   SELECT COUNT(*)
@@ -22,13 +23,17 @@ SET @profiles_exists := (
   WHERE table_schema = DATABASE()
     AND table_name = 'profiles'
 );
+--> statement-breakpoint
 
 SET @backfill_users_sql := IF(
   @profiles_exists > 0,
   'INSERT IGNORE INTO `users` (`id`, `email`, `name`) SELECT `id`, `email`, `display_name` FROM `profiles` WHERE `email` IS NOT NULL AND `email` != ''''',
   'SELECT 1'
 );
+--> statement-breakpoint
 
 PREPARE backfill_users_stmt FROM @backfill_users_sql;
+--> statement-breakpoint
 EXECUTE backfill_users_stmt;
+--> statement-breakpoint
 DEALLOCATE PREPARE backfill_users_stmt;
