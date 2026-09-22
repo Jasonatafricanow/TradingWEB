@@ -138,6 +138,10 @@ pnpm dev
 
 This public repository is a cleaned publication of an earlier project line. The public Git history begins with the publication baseline, so commit dates do not represent the original development sequence.
 
+## Project history
+
+The public repository is a cleaned publication baseline. See [PROJECT-HISTORY.md](PROJECT-HISTORY.md) for the architectural development record and how to interpret the public commit history.
+
 ## Engineering philosophy
 
 The system boundary should follow business authority, not UI boundaries.
