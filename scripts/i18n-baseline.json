@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "baselineCommit": "9e780979a696c533496a953336955f92bc2a013d",
+  "baselineCommit": "e1678dddb0daf956327a706f85c13f9a68254539",
   "roots": ["src"],
   "excludes": ["src/i18n"]
 }
