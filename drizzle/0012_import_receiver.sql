@@ -5,6 +5,7 @@
 -- mirroring fields on product_images.
 
 SET @db = DATABASE();
+--> statement-breakpoint
 
 -- product_images.original_url
 SET @exists = (
@@ -14,14 +15,19 @@ SET @exists = (
     AND TABLE_NAME = 'product_images'
     AND COLUMN_NAME = 'original_url'
 );
+--> statement-breakpoint
 SET @sql = IF(
   @exists = 0,
   'ALTER TABLE product_images ADD COLUMN original_url VARCHAR(2048) NULL AFTER src',
   'SELECT "product_images.original_url already exists" AS status'
 );
+--> statement-breakpoint
 PREPARE stmt FROM @sql;
+--> statement-breakpoint
 EXECUTE stmt;
+--> statement-breakpoint
 DEALLOCATE PREPARE stmt;
+--> statement-breakpoint
 
 -- product_images.mirror_status
 SET @exists = (
@@ -31,14 +37,19 @@ SET @exists = (
     AND TABLE_NAME = 'product_images'
     AND COLUMN_NAME = 'mirror_status'
 );
+--> statement-breakpoint
 SET @sql = IF(
   @exists = 0,
   'ALTER TABLE product_images ADD COLUMN mirror_status VARCHAR(20) NOT NULL DEFAULT ''pending'' AFTER original_url',
   'SELECT "product_images.mirror_status already exists" AS status'
 );
+--> statement-breakpoint
 PREPARE stmt FROM @sql;
+--> statement-breakpoint
 EXECUTE stmt;
+--> statement-breakpoint
 DEALLOCATE PREPARE stmt;
+--> statement-breakpoint
 
 -- product_images.mirrored_at
 SET @exists = (
@@ -48,14 +59,19 @@ SET @exists = (
     AND TABLE_NAME = 'product_images'
     AND COLUMN_NAME = 'mirrored_at'
 );
+--> statement-breakpoint
 SET @sql = IF(
   @exists = 0,
   'ALTER TABLE product_images ADD COLUMN mirrored_at TIMESTAMP NULL AFTER mirror_status',
   'SELECT "product_images.mirrored_at already exists" AS status'
 );
+--> statement-breakpoint
 PREPARE stmt FROM @sql;
+--> statement-breakpoint
 EXECUTE stmt;
+--> statement-breakpoint
 DEALLOCATE PREPARE stmt;
+--> statement-breakpoint
 
 -- Existing local images were not created from external URLs, so mark them mirrored.
 UPDATE product_images
@@ -63,6 +79,7 @@ SET mirror_status = 'mirrored',
     mirrored_at = COALESCE(mirrored_at, created_at)
 WHERE original_url IS NULL
   AND mirror_status = 'pending';
+--> statement-breakpoint
 
 -- Worker lookup index for pending mirrors.
 SET @exists = (
@@ -72,14 +89,19 @@ SET @exists = (
     AND TABLE_NAME = 'product_images'
     AND INDEX_NAME = 'pi_mirror_status_idx'
 );
+--> statement-breakpoint
 SET @sql = IF(
   @exists = 0,
   'ALTER TABLE product_images ADD INDEX pi_mirror_status_idx (mirror_status)',
   'SELECT "pi_mirror_status_idx already exists" AS status'
 );
+--> statement-breakpoint
 PREPARE stmt FROM @sql;
+--> statement-breakpoint
 EXECUTE stmt;
+--> statement-breakpoint
 DEALLOCATE PREPARE stmt;
+--> statement-breakpoint
 
 CREATE TABLE IF NOT EXISTS import_sessions (
   id VARCHAR(36) NOT NULL DEFAULT (UUID()),
@@ -95,6 +117,7 @@ CREATE TABLE IF NOT EXISTS import_sessions (
   KEY is_source_idx (source, source_store, started_at),
   KEY is_status_idx (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+--> statement-breakpoint
 
 CREATE TABLE IF NOT EXISTS import_jobs (
   id VARCHAR(36) NOT NULL DEFAULT (UUID()),
@@ -115,6 +138,7 @@ CREATE TABLE IF NOT EXISTS import_jobs (
     FOREIGN KEY (session_id) REFERENCES import_sessions(id)
     ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+--> statement-breakpoint
 
 CREATE TABLE IF NOT EXISTS external_source_mappings (
   id VARCHAR(36) NOT NULL DEFAULT (UUID()),
