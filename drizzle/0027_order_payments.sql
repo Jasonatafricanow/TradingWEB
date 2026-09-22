@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS order_payments (
   INDEX order_payments_order_idx (order_id),
   INDEX order_payments_provider_idx (provider_transaction_id),
   CONSTRAINT order_payments_order_fk FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB;
 --> statement-breakpoint
 
 SET @length = (
