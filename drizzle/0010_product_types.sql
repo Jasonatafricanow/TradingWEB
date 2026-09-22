@@ -5,6 +5,7 @@
 -- 幂等：使用 information_schema 检测，避免重复执行。
 
 SET @db = DATABASE();
+--> statement-breakpoint
 
 SET @exists = (
   SELECT COUNT(*)
@@ -12,6 +13,7 @@ SET @exists = (
   WHERE TABLE_SCHEMA = @db
     AND TABLE_NAME = 'product_types'
 );
+--> statement-breakpoint
 
 SET @sql = IF(@exists = 0, '
   CREATE TABLE product_types (
@@ -32,10 +34,14 @@ SET @sql = IF(@exists = 0, '
     KEY idx_sort_order (sort_order)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 ', 'SELECT "table already exists" AS status');
+--> statement-breakpoint
 
 PREPARE stmt FROM @sql;
+--> statement-breakpoint
 EXECUTE stmt;
+--> statement-breakpoint
 DEALLOCATE PREPARE stmt;
+--> statement-breakpoint
 
 INSERT IGNORE INTO product_types (code, label, label_en, description, sort_order) VALUES
   ('service', '咨询服务', 'Service', '咨询、顾问、会议等需要人工交付的服务型商品。', 1),
