@@ -7,6 +7,7 @@
 -- MySQL 不直接支持 IF NOT EXISTS for ADD COLUMN，
 -- 用存储过程 / information_schema 实现幂等
 SET @db = DATABASE();
+--> statement-breakpoint
 
 SET @exists = (
   SELECT COUNT(*)
@@ -15,12 +16,16 @@ SET @exists = (
     AND TABLE_NAME = 'order_items'
     AND COLUMN_NAME = 'delivery_method'
 );
+--> statement-breakpoint
 
 SET @sql = IF(@exists = 0,
   'ALTER TABLE order_items ADD COLUMN delivery_method VARCHAR(32) NULL AFTER subtotal',
   'SELECT "column already exists" AS status'
 );
+--> statement-breakpoint
 
 PREPARE stmt FROM @sql;
+--> statement-breakpoint
 EXECUTE stmt;
+--> statement-breakpoint
 DEALLOCATE PREPARE stmt;
