@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { verifyToken, hashPassword, passwordResetVersion, safeTimingEqualString } from "@/lib/auth-local"
 import { db } from "@/lib/db"
 import { IS_DEMO_MODE } from "@/config/constants"
+import { AUTH_API_MESSAGES } from "@/lib/auth-api-messages"
 
-const INVALID_RESET = "Reset link is expired or invalid"
 
 export async function POST(request: NextRequest) {
   try {
@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
 
     const payload = verifyToken(token)
     if (!payload || payload.role !== "password_reset" || !payload.pwdv) {
-      return NextResponse.json({ error: INVALID_RESET }, { status: 400 })
+      return NextResponse.json({ error: AUTH_API_MESSAGES.invalidResetLink }, { status: 400 })
     }
 
     if (IS_DEMO_MODE) {
