@@ -27,7 +27,9 @@ export function safeTimingEqualString(left: string, right: string): boolean {
   return timingSafeEqual(leftBuffer, rightBuffer)
 }
 
-const JWT_SECRET = resolveJwtSecret()
+function jwtSecret(): string {
+  return resolveJwtSecret()
+}
 const JWT_EXPIRY = process.env.JWT_EXPIRY || '7d' // 7 days
 
 function base64Url(str: string): string {
@@ -69,7 +71,7 @@ export function signToken(payload: Omit<JwtPayload, 'iat' | 'exp'>, expiry?: str
 
   const header = base64Url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }))
   const body = base64Url(JSON.stringify(fullPayload))
-  const signature = createHmac('sha256', JWT_SECRET)
+  const signature = createHmac('sha256', jwtSecret())
     .update(`${header}.${body}`)
     .digest('base64')
     .replace(/=/g, '')
@@ -87,7 +89,7 @@ export function verifyToken(token: string): JwtPayload | null {
     const [header, body, signature] = parts
 
     // Verify signature
-    const expectedSig = createHmac('sha256', JWT_SECRET)
+    const expectedSig = createHmac('sha256', jwtSecret())
       .update(`${header}.${body}`)
       .digest('base64')
       .replace(/=/g, '')
@@ -144,7 +146,7 @@ export function generateToken(length = 32): string {
  * links (including the one just consumed) can no longer be reused.
  */
 export function passwordResetVersion(passwordHash: string | null): string {
-  return createHmac("sha256", JWT_SECRET)
+  return createHmac("sha256", jwtSecret())
     .update(passwordHash ?? "<unset-password>")
     .digest("hex")
 }
