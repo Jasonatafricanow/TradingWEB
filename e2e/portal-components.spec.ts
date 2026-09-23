@@ -3,13 +3,13 @@ import { test, expect, type Page, type ConsoleMessage } from '@playwright/test';
 /**
  * Radix UI Portal 组件稳定性测试
  *
- * 验证修复后的 Portal 组件（统一使用 #radix-portal-container 容器）
- * 在快速交互场景下不会抛出 NotFoundError: removeChild。
+ * 验证当前 Portal 策略：Radix 使用默认 document.body portal，
+ * 快速交互不抛出 NotFoundError: removeChild，同时不重新引入历史
+ * #radix-portal-container stacking-context 问题。
  *
  * 测试场景：
- *  1. DropdownMenu 展开/关闭循环 10 次（导航栏货币/语言切换器）
- *  2. Select（/products 页面筛选/排序）展开 + 选择循环 5 次
- *  3. 稳定 Portal 容器已注入到 DOM
+ *  1. Select（/products 页面筛选/排序）展开 + 选择循环 5 次
+ *  2. 页面不注入已废弃的自定义 Portal 容器
  */
 
 interface ErrorCollector {
@@ -78,10 +78,12 @@ test.describe('Radix Portal 组件稳定性', () => {
     expect(critical, `Critical errors detected:\n${critical.join('\n')}`).toEqual([]);
   });
 
-  test('稳定 Portal 容器已注入到 DOM', async ({ page }) => {
-    await page.goto('/');
-    // 验证 PortalContainerInit 创建了 #radix-portal-container 节点
-    const container = page.locator('#radix-portal-container');
-    await expect(container).toHaveCount(1, { timeout: 10000 });
+  test('使用默认 body portal，不注入历史自定义容器', async ({ page }) => {
+    await page.goto('/products');
+    const selectTrigger = page.locator('[data-slot="select-trigger"]').first();
+    await expect(selectTrigger).toBeVisible({ timeout: 15000 });
+    await selectTrigger.click();
+    await expect(page.locator('[data-slot="select-content"]')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('#radix-portal-container')).toHaveCount(0);
   });
 });
