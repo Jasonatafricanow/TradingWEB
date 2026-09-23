@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { hashPassword, verifyPassword, signToken } from "@/lib/auth-local"
+import { verifyPassword, signToken } from "@/lib/auth-local"
 import { checkRateLimit, getClientIp, RATE_LIMITS } from "@/lib/rate-limit"
 import { IS_DEMO_MODE } from "@/config/constants"
 import { AUTH_API_MESSAGES } from "@/lib/auth-api-messages"
@@ -10,7 +10,7 @@ const DEMO_USERS: Record<string, { password: string; id: string; name: string }>
   "admin@globaltrade.enterprise": { password: "admin123", id: "demo-admin-001", name: "Admin" },
 }
 
-const DUMMY_PASSWORD_HASH = hashPassword("invalid-login-dummy-password")
+const DUMMY_PASSWORD_HASH = "00000000000000000000000000000000:d4934e5d4e020f19d023e801e778b970249c78a43a775d2ef2d910fc6e324c42fc2e76e009f585ebe18e8146e6c7051663d6f60c016e42f027bd6465108ae67d"
 
 export async function POST(request: NextRequest) {
   try {
@@ -75,12 +75,12 @@ export async function POST(request: NextRequest) {
     const user = users[0]
     if (!user) {
       // Keep the missing-user path computationally close to a bad-password path.
-      verifyPassword(password, DUMMY_PASSWORD_HASH)
+      await verifyPassword(password, DUMMY_PASSWORD_HASH)
       return NextResponse.json({ error: AUTH_API_MESSAGES.invalidCredentials }, { status: 401 })
     }
 
     const passwordHash = user.password_hash || DUMMY_PASSWORD_HASH
-    const passwordOk = verifyPassword(password, passwordHash)
+    const passwordOk = await verifyPassword(password, passwordHash)
     if (!user.is_active || !user.password_hash || !passwordOk) {
       return NextResponse.json({ error: AUTH_API_MESSAGES.invalidCredentials }, { status: 401 })
     }
