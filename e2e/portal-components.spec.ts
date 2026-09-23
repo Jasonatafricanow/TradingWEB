@@ -9,7 +9,7 @@ import { test, expect, type Page, type ConsoleMessage } from '@playwright/test';
  * 测试场景：
  *  1. DropdownMenu 展开/关闭循环 10 次（导航栏货币/语言切换器）
  *  2. Select（/products 页面筛选/排序）展开 + 选择循环 5 次
- *  3. 稳定 Portal 容器已注入到 DOM
+ *  3. 默认 body portal 策略不会重新引入旧的专用容器
  */
 
 interface ErrorCollector {
@@ -78,10 +78,11 @@ test.describe('Radix Portal 组件稳定性', () => {
     expect(critical, `Critical errors detected:\n${critical.join('\n')}`).toEqual([]);
   });
 
-  test('稳定 Portal 容器已注入到 DOM', async ({ page }) => {
-    await page.goto('/');
-    // 验证 PortalContainerInit 创建了 #radix-portal-container 节点
-    const container = page.locator('#radix-portal-container');
-    await expect(container).toHaveCount(1, { timeout: 10000 });
+  test("默认使用 body portal，不创建历史专用容器", async ({ page }) => {
+    const collector = captureErrors(page);
+    await page.goto("/");
+    await expect(page.locator("#radix-portal-container")).toHaveCount(0);
+    const critical = getCriticalErrors(collector);
+    expect(critical, `Critical errors detected:\n${critical.join("\n")}`).toEqual([]);
   });
 });
