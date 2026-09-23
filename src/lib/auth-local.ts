@@ -6,7 +6,7 @@
  * - HMAC-SHA256 JWT 签名
  */
 
-import { randomBytes, createHmac, pbkdf2Sync, timingSafeEqual } from 'node:crypto'
+import { randomBytes, createHmac, pbkdf2, timingSafeEqual } from 'node:crypto'
 
 // ==================== JWT ====================
 
@@ -120,16 +120,28 @@ const HASH_KEYLEN = 64
 const HASH_DIGEST = 'sha512'
 const SALT_LENGTH = 16
 
-export function hashPassword(password: string): string {
+function derivePasswordHash(password: string, salt: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    pbkdf2(password, salt, HASH_ITERATIONS, HASH_KEYLEN, HASH_DIGEST, (error, derivedKey) => {
+      if (error) {
+        reject(error)
+        return
+      }
+      resolve(derivedKey.toString('hex'))
+    })
+  })
+}
+
+export async function hashPassword(password: string): Promise<string> {
   const salt = randomBytes(SALT_LENGTH).toString('hex')
-  const hash = pbkdf2Sync(password, salt, HASH_ITERATIONS, HASH_KEYLEN, HASH_DIGEST).toString('hex')
+  const hash = await derivePasswordHash(password, salt)
   return `${salt}:${hash}`
 }
 
-export function verifyPassword(password: string, stored: string): boolean {
+export async function verifyPassword(password: string, stored: string): Promise<boolean> {
   const [salt, hash] = stored.split(':')
   if (!salt || !hash) return false
-  const computed = pbkdf2Sync(password, salt, HASH_ITERATIONS, HASH_KEYLEN, HASH_DIGEST).toString('hex')
+  const computed = await derivePasswordHash(password, salt)
   return safeTimingEqualString(computed, hash)
 }
 
