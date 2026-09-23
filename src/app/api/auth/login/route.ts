@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { hashPassword, verifyPassword, signToken } from "@/lib/auth-local"
 import { checkRateLimit, getClientIp, RATE_LIMITS } from "@/lib/rate-limit"
 import { IS_DEMO_MODE } from "@/config/constants"
+import { AUTH_API_MESSAGES } from "@/lib/auth-api-messages"
 
 /** Demo users for when no database is configured */
 const DEMO_USERS: Record<string, { password: string; id: string; name: string }> = {
@@ -9,7 +10,6 @@ const DEMO_USERS: Record<string, { password: string; id: string; name: string }>
   "admin@globaltrade.enterprise": { password: "admin123", id: "demo-admin-001", name: "Admin" },
 }
 
-const INVALID_CREDENTIALS = "Invalid email or password"
 const DUMMY_PASSWORD_HASH = hashPassword("invalid-login-dummy-password")
 
 export async function POST(request: NextRequest) {
@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
     if (!limit.allowed) {
       const retryAfter = Math.max(1, Math.ceil((limit.resetAt - Date.now()) / 1000))
       return NextResponse.json(
-        { error: "Too many login attempts. Try again later." },
+        { error: AUTH_API_MESSAGES.tooManyLoginAttempts },
         { status: 429, headers: { "Retry-After": String(retryAfter) } },
       )
     }
@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
     if (!user) {
       // Keep the missing-user path computationally close to a bad-password path.
       verifyPassword(password, DUMMY_PASSWORD_HASH)
-      return NextResponse.json({ error: INVALID_CREDENTIALS }, { status: 401 })
+      return NextResponse.json({ error: AUTH_API_MESSAGES.invalidCredentials }, { status: 401 })
     }
 
     const passwordHash = user.password_hash || DUMMY_PASSWORD_HASH
