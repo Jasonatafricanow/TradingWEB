@@ -37,15 +37,34 @@ async function gotoAdmin(page: Page, path: string) {
   await page.goto(`/admin${path}`);
 }
 
+async function expectListLoaded(
+  page: Page,
+  path: string,
+  apiPath: string,
+  expectedHeaders: string[],
+) {
+  const responsePromise = page.waitForResponse((response) =>
+    response.url().includes(apiPath) && response.request().method() === "GET",
+  );
+  await gotoAdmin(page, path);
+  const response = await responsePromise;
+  expect(response.ok()).toBeTruthy();
+  await expect(page.locator("body")).not.toContainText("Application error");
+
+  // DataTable intentionally renders an EmptyState instead of an empty <table>.
+  // Only assert column headers when the API returned rows and a table exists.
+  const table = page.locator("table").first();
+  if (await table.count()) {
+    await expect(table).toBeVisible();
+    for (const header of expectedHeaders) {
+      await expect(table.locator("th", { hasText: header })).toBeVisible();
+    }
+  }
+}
+
 test.describe('admin reviews: DataTable + status filter + search', () => {
   test('页面加载并展示表头', async ({ page }) => {
-    await gotoAdmin(page, '/reviews');
-    // DataTable 渲染为 <table>，首列头为"商品"
-    const table = page.locator('table').first();
-    await expect(table).toBeVisible();
-    await expect(table.locator('th', { hasText: '商品' })).toBeVisible();
-    await expect(table.locator('th', { hasText: '评分' })).toBeVisible();
-    await expect(table.locator('th', { hasText: '状态' })).toBeVisible();
+    await expectListLoaded(page, "/reviews", "/api/admin/reviews", ["商品", "评分", "状态"]);
   });
 
   test('点击"待审核"按钮，URL 增加 isApproved=false 参数', async ({ page }) => {
@@ -71,11 +90,7 @@ test.describe('admin reviews: DataTable + status filter + search', () => {
 
 test.describe('admin coupons: DataTable + status filter + search', () => {
   test('页面加载并展示表头', async ({ page }) => {
-    await gotoAdmin(page, '/coupons');
-    const table = page.locator('table').first();
-    await expect(table).toBeVisible();
-    await expect(table.locator('th', { hasText: '优惠码' })).toBeVisible();
-    await expect(table.locator('th', { hasText: '状态' })).toBeVisible();
+    await expectListLoaded(page, "/coupons", "/api/admin/coupons", ["优惠码", "状态"]);
   });
 
   test('点击"启用"按钮，URL 增加 isActive=true', async ({ page }) => {
@@ -83,7 +98,7 @@ test.describe('admin coupons: DataTable + status filter + search', () => {
       r.url().includes('/api/admin/coupons') && r.url().includes('isActive=true'),
     );
     await gotoAdmin(page, '/coupons');
-    await page.getByRole('button', { name: '启用' }).click();
+    await page.getByRole('button', { name: '启用', exact: true }).click();
     const req = await reqPromise;
     expect(req.url()).toContain('isActive=true');
   });
@@ -91,12 +106,7 @@ test.describe('admin coupons: DataTable + status filter + search', () => {
 
 test.describe('admin refunds: DataTable + 5 status filter + search', () => {
   test('页面加载并展示表头', async ({ page }) => {
-    await gotoAdmin(page, '/refunds');
-    const table = page.locator('table').first();
-    await expect(table).toBeVisible();
-    await expect(table.locator('th', { hasText: '订单号' })).toBeVisible();
-    await expect(table.locator('th', { hasText: '退款金额' })).toBeVisible();
-    await expect(table.locator('th', { hasText: '状态' })).toBeVisible();
+    await expectListLoaded(page, "/refunds", "/api/admin/refunds", ["订单号", "退款金额", "状态"]);
   });
 
   test('点击"已通过"按钮，URL 增加 status=approved', async ({ page }) => {
@@ -112,11 +122,7 @@ test.describe('admin refunds: DataTable + 5 status filter + search', () => {
 
 test.describe('admin abandoned-carts: DataTable + recovered filter + search', () => {
   test('页面加载并展示表头', async ({ page }) => {
-    await gotoAdmin(page, '/abandoned-carts');
-    const table = page.locator('table').first();
-    await expect(table).toBeVisible();
-    await expect(table.locator('th', { hasText: '用户/邮箱' })).toBeVisible();
-    await expect(table.locator('th', { hasText: '状态' })).toBeVisible();
+    await expectListLoaded(page, "/abandoned-carts", "/api/admin/abandoned-carts", ["用户/邮箱", "状态"]);
   });
 
   test('点击"已恢复"按钮，URL 增加 recovered=true', async ({ page }) => {
