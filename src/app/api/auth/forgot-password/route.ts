@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { passwordResetVersion, signToken } from "@/lib/auth-local"
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit"
 import { IS_DEMO_MODE } from "@/config/constants"
+import { AUTH_API_MESSAGES } from "@/lib/auth-api-messages"
 
 const GENERIC_RESET_MESSAGE = "If the email is registered, a reset link will be sent."
 
@@ -21,7 +22,7 @@ export async function POST(request: NextRequest) {
     if (!limit.allowed) {
       const retryAfter = Math.max(1, Math.ceil((limit.resetAt - Date.now()) / 1000))
       return NextResponse.json(
-        { error: "Too many reset requests. Try again later." },
+        { error: AUTH_API_MESSAGES.tooManyResetRequests },
         { status: 429, headers: { "Retry-After": String(retryAfter) } },
       )
     }
