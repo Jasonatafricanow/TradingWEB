@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { passwordResetVersion, signToken } from "@/lib/auth-local"
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit"
-import { sendPasswordResetEmail } from "@/services/notifications/email-service"
 import { IS_DEMO_MODE } from "@/config/constants"
 
 const GENERIC_RESET_MESSAGE = "If the email is registered, a reset link will be sent."
@@ -61,6 +60,7 @@ export async function POST(request: NextRequest) {
       const resetUrl = `${process.env.NEXT_PUBLIC_SITE_URL || "https://fjglobal.online"}/auth/reset-password?token=${resetToken}`
 
       try {
+        const { sendPasswordResetEmail } = await import("@/services/notifications/email-service")
         await sendPasswordResetEmail(user.email, resetUrl)
       } catch (error) {
         // Keep the public response enumeration-safe while preserving a server-side signal.
