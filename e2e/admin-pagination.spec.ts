@@ -3,8 +3,8 @@ import { test, expect, type Page } from '@playwright/test';
 /**
  * 后台管理 — 评论审核 / 优惠券 / 退款 / 弃单 的 DataTable + 分页 + 状态筛选烟测。
  *
- * 前置：管理员已登录；CI 中通过 storageState 注入 token。
- * 这里只测"接口契约 + 客户端状态机"，不依赖真实数据库内容：
+ * 前置：beforeEach 通过应用自己的 demo-admin 登录接口建立会话。
+ * 列表 API 使用稳定 mock 数据，因此 CI 不依赖真实数据库内容：
  *   - 加载页面能拿到 <table> 结构
  *   - 切换 status filter 触发 fetch 并改变 URL
  *   - 搜索框输入触发 fetch
@@ -30,6 +30,52 @@ test.beforeEach(async ({ page, request }) => {
   await page.addInitScript((authToken: string) => {
     window.localStorage.setItem("tradingweb_auth_token", authToken);
   }, token);
+
+
+  const json = (route: Parameters<Parameters<typeof page.route>[1]>[0], data: unknown) =>
+    route.fulfill({ json: { data: [data], total: 1, page: 1, pageSize: 20 } });
+
+  await page.route("**/api/admin/reviews?*", (route) => json(route, {
+    id: "review-e2e-1",
+    product_id: "product-e2e-1",
+    user_id: "user-e2e-1",
+    rating: 5,
+    title: "E2E review",
+    content: "Stable fixture",
+    is_approved: false,
+    created_at: "2026-09-23T00:00:00.000Z",
+    product_title: "E2E Product",
+  }));
+  await page.route("**/api/admin/coupons?*", (route) => json(route, {
+    id: "coupon-e2e-1",
+    code: "E2E10",
+    type: "percentage",
+    value: "10",
+    min_order_amount: "0",
+    usage_limit: 100,
+    used_count: 1,
+    is_active: true,
+    created_at: "2026-09-23T00:00:00.000Z",
+  }));
+  await page.route("**/api/admin/refunds?*", (route) => json(route, {
+    id: "refund-e2e-1",
+    order_id: "order-e2e-1",
+    reason: "E2E fixture",
+    amount: "10.00",
+    status: "pending",
+    restocked: false,
+    created_at: "2026-09-23T00:00:00.000Z",
+    orders: { order_no: "E2E-ORDER-1", total_amount: "20.00" },
+  }));
+  await page.route("**/api/admin/abandoned-carts?*", (route) => json(route, {
+    id: "cart-e2e-1",
+    user_id: "user-e2e-1",
+    email: "e2e@example.com",
+    items: [],
+    total: "20.00",
+    coupon_sent: false,
+    abandoned_at: "2026-09-23T00:00:00.000Z",
+  }));
 });
 
 async function gotoAdmin(page: Page, path: string) {
@@ -83,7 +129,7 @@ test.describe('admin coupons: DataTable + status filter + search', () => {
       r.url().includes('/api/admin/coupons') && r.url().includes('isActive=true'),
     );
     await gotoAdmin(page, '/coupons');
-    await page.getByRole('button', { name: '启用' }).click();
+    await page.getByRole('button', { name: '启用', exact: true }).click();
     const req = await reqPromise;
     expect(req.url()).toContain('isActive=true');
   });
