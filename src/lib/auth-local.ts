@@ -57,6 +57,7 @@ export interface JwtPayload {
   sub: string       // user_id
   email: string
   role?: string
+  pwdv?: string     // password-reset credential version
   iat: number       // issued at
   exp: number       // expires at
 }
@@ -134,4 +135,16 @@ export function verifyPassword(password: string, stored: string): boolean {
 
 export function generateToken(length = 32): string {
   return randomBytes(length).toString('hex')
+}
+
+
+/**
+ * Bind password-reset tokens to the user's current credential state.
+ * After a successful password change the version changes, so old reset
+ * links (including the one just consumed) can no longer be reused.
+ */
+export function passwordResetVersion(passwordHash: string | null): string {
+  return createHmac("sha256", JWT_SECRET)
+    .update(passwordHash ?? "<unset-password>")
+    .digest("hex")
 }
