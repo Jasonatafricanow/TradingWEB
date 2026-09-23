@@ -35,12 +35,12 @@ export async function POST(request: NextRequest) {
     const user = users[0]
 
     if (!user) {
-      return NextResponse.json({ error: INVALID_RESET }, { status: 400 })
+      return NextResponse.json({ error: AUTH_API_MESSAGES.invalidResetLink }, { status: 400 })
     }
 
     const currentVersion = passwordResetVersion(user.password_hash)
     if (!safeTimingEqualString(currentVersion, payload.pwdv)) {
-      return NextResponse.json({ error: INVALID_RESET }, { status: 400 })
+      return NextResponse.json({ error: AUTH_API_MESSAGES.invalidResetLink }, { status: 400 })
     }
 
     const passwordHash = hashPassword(password)
@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
     )
     const affectedRows = Number((result as { affectedRows?: number }).affectedRows ?? 0)
     if (affectedRows !== 1) {
-      return NextResponse.json({ error: INVALID_RESET }, { status: 400 })
+      return NextResponse.json({ error: AUTH_API_MESSAGES.invalidResetLink }, { status: 400 })
     }
 
     return NextResponse.json({
