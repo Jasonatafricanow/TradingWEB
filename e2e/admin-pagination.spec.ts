@@ -12,9 +12,28 @@ import { test, expect, type Page } from '@playwright/test';
  * 这些测试是冒烟，不是完整业务覆盖；它们防止"分页参数接错"、"DataTable 渲染崩"等回归。
  */
 
+test.beforeEach(async ({ page, request }) => {
+  const response = await request.post("/api/auth/login", {
+    data: {
+      email: "admin@globaltrade.enterprise",
+      password: "admin123",
+    },
+  });
+  if (!response.ok()) {
+    throw new Error(`E2E admin login failed: ${response.status()}`);
+  }
+  const payload = await response.json() as { data?: { token?: string } };
+  const token = payload.data?.token;
+  if (!token) {
+    throw new Error("E2E admin login did not return a token");
+  }
+  await page.addInitScript((authToken: string) => {
+    window.localStorage.setItem("tradingweb_auth_token", authToken);
+  }, token);
+});
+
 async function gotoAdmin(page: Page, path: string) {
-  // 假设测试 fixture 已注入 admin token；本地开发可以用
-  //   pnpm test:e2e -- --headed  手动登录后测试。
+  // beforeEach injects a real demo-admin session through the public login API.
   await page.goto(`/admin${path}`);
 }
 
