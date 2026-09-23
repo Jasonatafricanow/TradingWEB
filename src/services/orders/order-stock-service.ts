@@ -32,45 +32,53 @@ async function hasOrderStockTxn(orderId: string, type: "in" | "out", tx?: DbTx):
   return Boolean(row);
 }
 
+export async function deductInventoryForOrderInTransaction(
+  orderId: string,
+  opts: { operatorId?: string | null; storeId?: string | null; source?: string } = {},
+  tx: DbTx,
+): Promise<DeductResult> {
+  if (await hasOrderStockTxn(orderId, "out", tx)) {
+    return { deducted: false, reason: "already_deducted", items: [] };
+  }
+
+  const items = await tx.select().from(orderItems).where(eq(orderItems.order_id, orderId));
+  const physical = items.filter((item) => item.product_type === "physical");
+  if (physical.length === 0) {
+    return { deducted: false, reason: "no_physical_items", items: [] };
+  }
+
+  await allocateInventory({
+    storeId: opts.storeId ?? null,
+    operatorId: opts.operatorId ?? null,
+    referenceType: "order",
+    referenceId: orderId,
+    note: `Order inventory allocation (${opts.source ?? "payment"})`,
+    lines: physical.map((item) => ({
+      productId: item.product_id,
+      variantId: item.variant_id,
+      productType: item.product_type,
+      title: item.product_title,
+      quantity: item.quantity,
+    })),
+  }, undefined, tx);
+
+  return {
+    deducted: true,
+    items: physical.map((item) => ({
+      product_id: item.product_id,
+      variant_id: item.variant_id,
+      quantity: item.quantity,
+    })),
+  };
+}
+
 export async function deductInventoryForOrder(
   orderId: string,
   opts: { operatorId?: string | null; storeId?: string | null; source?: string } = {},
 ): Promise<DeductResult> {
-  const result = await db.transaction(async (tx) => {
-    if (await hasOrderStockTxn(orderId, "out", tx)) {
-      return { deducted: false, reason: "already_deducted", items: [] } as DeductResult;
-    }
-
-    const items = await tx.select().from(orderItems).where(eq(orderItems.order_id, orderId));
-    const physical = items.filter((item) => item.product_type === "physical");
-    if (physical.length === 0) {
-      return { deducted: false, reason: "no_physical_items", items: [] } as DeductResult;
-    }
-
-    await allocateInventory({
-      storeId: opts.storeId ?? null,
-      operatorId: opts.operatorId ?? null,
-      referenceType: "order",
-      referenceId: orderId,
-      note: `Order inventory allocation (${opts.source ?? "payment"})`,
-      lines: physical.map((item) => ({
-        productId: item.product_id,
-        variantId: item.variant_id,
-        productType: item.product_type,
-        title: item.product_title,
-        quantity: item.quantity,
-      })),
-    }, undefined, tx);
-
-    return {
-      deducted: true,
-      items: physical.map((item) => ({
-        product_id: item.product_id,
-        variant_id: item.variant_id,
-        quantity: item.quantity,
-      })),
-    } as DeductResult;
-  });
+  const result = await db.transaction(
+    (tx) => deductInventoryForOrderInTransaction(orderId, opts, tx),
+  );
 
   if (result.deducted) {
     await addOrderTimeline({

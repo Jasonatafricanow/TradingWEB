@@ -13,12 +13,14 @@ CREATE TABLE payment_methods (
   created_at TIMESTAMP NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMP NULL DEFAULT NULL ON UPDATE NOW()
 );
+--> statement-breakpoint
 
 -- Seed default offline methods
 INSERT INTO payment_methods (id, code, name, name_en, type, enabled, sort_order)
 VALUES
   (UUID(), 'cod', '货到付款', 'Cash on Delivery', 'offline_manual', TRUE, 10),
   (UUID(), 'bank_transfer', '银行转账', 'Bank Transfer', 'offline_manual', TRUE, 20);
+--> statement-breakpoint
 
 -- Widen orders.payment_method to fit custom codes
 ALTER TABLE orders MODIFY COLUMN payment_method VARCHAR(64);

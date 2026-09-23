@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS pos_inventory_migration_exceptions (
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   INDEX pos_inventory_migration_exceptions_type_idx (exception_type, created_at),
   INDEX pos_inventory_migration_exceptions_product_idx (product_id, variant_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB;
 --> statement-breakpoint
 
 -- Synchronize the current product/variant relation anomalies. Existing rows are
@@ -398,7 +398,7 @@ CREATE TABLE IF NOT EXISTS pos_purchase_orders (
   CONSTRAINT pos_purchase_orders_created_by_fk FOREIGN KEY (created_by) REFERENCES staff(id),
   CONSTRAINT pos_purchase_orders_received_by_fk FOREIGN KEY (received_by) REFERENCES staff(id),
   CONSTRAINT pos_purchase_orders_status_check CHECK (status IN ('ordered', 'received', 'cancelled'))
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB;
 --> statement-breakpoint
 
 CREATE TABLE IF NOT EXISTS pos_purchase_order_items (
@@ -418,4 +418,4 @@ CREATE TABLE IF NOT EXISTS pos_purchase_order_items (
   CONSTRAINT pos_purchase_order_items_ordered_qty_check CHECK (ordered_qty > 0),
   CONSTRAINT pos_purchase_order_items_received_qty_check CHECK (received_qty BETWEEN 0 AND ordered_qty),
   CONSTRAINT pos_purchase_order_items_unit_cost_check CHECK (unit_cost >= 0)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB;

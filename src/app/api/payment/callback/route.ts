@@ -64,14 +64,13 @@ export async function GET(request: NextRequest) {
           }
 
           // 原子翻转：并发 callback/webhook 只有第一个成功
-          const { transitioned, order: updated } = await markOrderPaidIfNotAlready(orderId, {
+          const finalized = await markOrderPaidIfNotAlready(orderId, {
             payment_id: result.transactionId || paymentId,
+            source: "paypal_callback",
+            external_payment_confirmed: true,
           });
-
-          // 仅首次 paid 执行副作用:核销优惠券、扣库存、写时间线
-          if (transitioned && updated) {
-            const { runOrderPaidSideEffects } = await import("@/services/orders/order-paid-effects");
-            await runOrderPaidSideEffects(updated, { source: "paypal_callback" });
+          if (finalized.conflict) {
+            return redirect(`/orders?payment=error&reason=payment_conflict&order_id=${orderId}`, request.url);
           }
 
           return redirect(`/orders?payment=success&order_id=${orderId}`, request.url);
@@ -101,14 +100,13 @@ export async function GET(request: NextRequest) {
           }
 
           // 原子翻转：并发 callback/webhook 只有第一个成功
-          const { transitioned, order: updated } = await markOrderPaidIfNotAlready(orderId, {
+          const finalized = await markOrderPaidIfNotAlready(orderId, {
             payment_id: paymentId,
+            source: "stripe_callback",
+            external_payment_confirmed: true,
           });
-
-          // 仅首次 paid 执行副作用:核销优惠券、扣库存、写时间线
-          if (transitioned && updated) {
-            const { runOrderPaidSideEffects } = await import("@/services/orders/order-paid-effects");
-            await runOrderPaidSideEffects(updated, { source: "stripe_callback" });
+          if (finalized.conflict) {
+            return redirect(`/orders?payment=error&reason=payment_conflict&order_id=${orderId}`, request.url);
           }
 
           return redirect(`/orders?payment=success&order_id=${orderId}`, request.url);
