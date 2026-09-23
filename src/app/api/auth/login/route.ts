@@ -82,7 +82,7 @@ export async function POST(request: NextRequest) {
     const passwordHash = user.password_hash || DUMMY_PASSWORD_HASH
     const passwordOk = verifyPassword(password, passwordHash)
     if (!user.is_active || !user.password_hash || !passwordOk) {
-      return NextResponse.json({ error: INVALID_CREDENTIALS }, { status: 401 })
+      return NextResponse.json({ error: AUTH_API_MESSAGES.invalidCredentials }, { status: 401 })
     }
 
     const token = signToken({ sub: user.id, email: user.email })
