@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
     }
 
     const id = randomUUID()
-    const passwordHash = hashPassword(password)
+    const passwordHash = await hashPassword(password)
     await db.$client.execute(
       'INSERT INTO users (id, email, name, password_hash) VALUES (?, ?, ?, ?)',
       [id, email, name || null, passwordHash]

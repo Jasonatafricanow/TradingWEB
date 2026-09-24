@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: AUTH_API_MESSAGES.invalidResetLink }, { status: 400 })
     }
 
-    const passwordHash = hashPassword(password)
+    const passwordHash = await hashPassword(password)
     const [result] = await db.$client.execute(
       "UPDATE users SET password_hash = ?, updated_at = NOW() WHERE id = ? AND email = ? AND password_hash <=> ?",
       [passwordHash, user.id, user.email, user.password_hash],
