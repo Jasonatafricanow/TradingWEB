@@ -1,53 +1,78 @@
-# TradingWEB · 研发演进与架构设计基线
+# TradingWEB — Development and Architecture Record
 
-本文档记录 TradingWEB（GlobalTrade Hub）的技术架构选型、核心迭代历程、工程规范与数据库治理方案。
+This document records the project's architecture direction and important corrections.
+Current source, tests, migrations and CI are stronger authority than historical sprint
+descriptions.
 
----
+## 1. Shared business authority
 
-## 1. 架构选型与工程规范
+TradingWEB serves several interfaces—storefront, admin, POS and migration—but they converge
+on one business/data authority. Client-specific UI state must not become an alternate
+source of truth for orders, inventory, staff identity or imported records.
 
-### 1.1 前后端分层与解耦
-* **表现层（Presentation Layer）**：Next.js 16 App Router。前台面向消费者的展示页面采用 SSR/SSG，后台管理界面与 POS 对接端点采用基于 React 19 的动态交互。
-* **业务服务层（Service Layer）**：所有数据库交互与复杂业务规则集中封装在 `src/services/` 目录中，严禁 API 路由（Route Handlers）直接嵌入大段原始 SQL。
-* **数据持久层（Persistence Layer）**：采用 Drizzle ORM，以 TypeScript 代码即 Schema 的方式管理表结构定义与迁移，提供完全类型安全的数据访问保障。
+The codebase separates presentation/API routes from service and persistence concerns under
+`src/app/`, `src/services/` and `src/db/`.
 
-### 1.2 状态机与幂等设计
-* **订单状态机**：订单生命周期严格遵循不可逆状态流转（待支付 -> 已支付 -> 履约中 -> 已完成 / 已退款）。
-* **POS 交易幂等性**：对所有涉及资金和库存变动的端点强制要求 `client_ref` 唯一交易流水号，服务端通过数据库唯一索引与 Redis/内存锁实现去重。
+## 2. Retry and transaction semantics
 
----
+POS and migration clients can retry. Repeated delivery of an intent must not imply repeated
+business effects.
 
-## 2. 迭代演进历程（Sprints）
+For POS order creation, `client_ref` participates in the idempotency boundary together
+with server-side persistence/validation. Do not infer a Redis dependency from older design
+notes; the current repository manifest does not declare Redis as a runtime dependency.
 
-* **Sprint 1 · 基础设施与认证重构**：
-  * 完成自建 JWT 鉴权与 PBKDF2 密码哈希，剥离外部第三方 Auth 强依赖。
-  * 建立 Next.js 16 与 Tailwind CSS 4 基础骨架。
-* **Sprint 2 · 商品与多规格建模**：
-  * 支持实物商品（多属性、变体 SKU）、虚拟商品及服务商品的统一模型抽象。
-  * 引入 Zod 进行前后端双向输入校验。
-* **Sprint 3 · 支付与国际化（i18n）**：
-  * 完成 PayPal REST 与 Stripe 支付接入，支持 Webhook 异步回调防掉单。
-  * 构建全站多语言字典与语言切换上下文（中 / 英 / 西 / 日）。
-* **Sprint 4 · POS 移动端协议对接**：
-  * 为移动端收银 App 开放条码秒查、员工 PIN 码验证、挂单和原路退款端点。
-* **Sprint 5 · 管理后台 DataTable 现代化改造**：
-  * 全面重构 Admin 列表页，引入 TanStack Table 实现批量选择、列排序与数据过滤。
-  * 强化枚举类型定义与操作审计日志留痕。
+Payment completion is more than a status flag. Audit work moved order finalization,
+inventory allocation, coupon consumption and timeline writes into a transaction-oriented
+finalizer so a local payment success cannot leave partially applied business state.
 
----
+## 3. Identity and authentication corrections
 
-## 3. 测试与质量保证
+The public initial release was followed by targeted audit fixes.
+
+Staff identity:
+- bind staff authorization to the active authenticated user ID;
+- remove implicit staff binding by email;
+- keep active-session checks on protected profile/admin paths.
+
+Authentication/reset:
+- rate-limit login;
+- avoid account enumeration;
+- bind reset tokens to credential version;
+- make reset links single-use;
+- deliver resets through the configured provider path;
+- validate JWT secret at runtime so tooling/build imports do not require a production secret.
+
+These corrections are intentionally visible in Git history rather than rewritten into a
+fictional clean initial implementation.
+
+## 4. Migration ownership
+
+ShopifyDataBridge is a sender/adapter. TradingWEB owns target-side import validation,
+reference resolution, idempotency, sessions/reconciliation and database writes.
+
+This keeps migration authorization and target schema authority on the system that owns the
+business data.
+
+## 5. Verification
+
+The current CI uses disposable MySQL and runs the repository's executable quality gates:
 
 ```bash
-# 运行类型检查
-pnpm ts-check
-
-# 运行代码检查
-pnpm lint
-
-# 运行单元测试
 pnpm test
-
-# 运行端到端 E2E 测试
-pnpm test:e2e
+pnpm ts-check
+pnpm lint:build
+pnpm i18n:check
+pnpm exec drizzle-kit migrate
+pnpm exec tsx scripts/schema-integrity-check.ts
+pnpm exec tsx scripts/pos-integration-test.ts
 ```
+
+`pnpm test:e2e` remains available for browser-level coverage; consult the workflow and
+test configuration for what is executed automatically on each commit.
+
+## 6. Evidence boundary
+
+The repository demonstrates business-system implementation and correctness work. It should
+not be read as proof of production-scale traffic, complete payment-provider certification,
+or physical-store hardware validation.
