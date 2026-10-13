@@ -22,7 +22,7 @@ export async function generateInvoiceHtml(orderId: string): Promise<string> {
     .join('');
 
   return `<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>Invoice - ${escapeHtml(order.order_no)}</title>
+<html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:"><title>Invoice - ${escapeHtml(order.order_no)}</title>
 <style>
   body { font-family: Arial, sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; color: #333; }
   h1 { color: #2563eb; font-size: 24px; }

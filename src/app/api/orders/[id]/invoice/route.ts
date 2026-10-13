@@ -23,6 +23,7 @@ export async function GET(
     return new NextResponse(html, {
       headers: {
         "Content-Type": "text/html; charset=utf-8",
+        "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; img-src data:",
         "Content-Disposition": `inline; filename="invoice_${id.slice(0, 8)}.html"`,
       },
     })

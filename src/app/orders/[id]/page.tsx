@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { useI18n } from "@/contexts/i18n-context"
 import { useAuth } from "@/contexts/auth-context"
-import { apiFetch } from "@/lib/client-api"
+import { apiFetch, openAuthenticatedHtml } from "@/lib/client-api"
 import { canCancelPendingOrder, canRepayOrder, getRepaymentProvider } from "@/lib/order-payment"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -105,6 +105,15 @@ export default function OrderDetailPage() {
       toast.error("提交失败")
     } finally {
       setRefunding(false)
+    }
+  }
+
+  const handleOpenInvoice = async () => {
+    const target = window.open("", "_blank")
+    try {
+      await openAuthenticatedHtml(`/api/orders/${id}/invoice`, target)
+    } catch {
+      toast.error(locale === "zh" ? "发票加载失败，请稍后重试" : "Could not load the invoice")
     }
   }
 
@@ -258,11 +267,9 @@ export default function OrderDetailPage() {
 
       {/* Invoice */}
       {(order.status === "paid" || order.status === "completed") && (
-        <a href={`/api/orders/${id}/invoice`} target="_blank" className="block mb-4">
-          <Button variant="outline" className="w-full">
-            <FileText className="h-4 w-4 mr-2" /> 下载发票
-          </Button>
-        </a>
+        <Button variant="outline" className="mb-4 w-full" onClick={handleOpenInvoice}>
+          <FileText className="h-4 w-4 mr-2" /> 下载发票
+        </Button>
       )}
 
       {/* Actions */}
