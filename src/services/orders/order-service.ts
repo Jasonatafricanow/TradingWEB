@@ -1,11 +1,12 @@
 import { db } from '@/lib/db';
 import { eq, desc, and, isNull, ne } from 'drizzle-orm';
-import { orders, orderItems, products, productVariants, inventory } from '@/storage/database/shared/schema';
+import { orders, orderItems, products, productVariants, inventory, deliveryZones } from '@/storage/database/shared/schema';
+import { computeZoneShipping } from '@/services/admin/delivery-zone-service';
 import { recordOrderPayment } from './order-payment-service';
 import { randomUUID } from 'node:crypto';
 import { consumeCouponInTransaction, validateCoupon } from '@/services/admin/coupon-service';
 import { ValidationError } from '@/lib/errors';
-import { emptyToNull, moneyOrZero, dateOrNull, logDbError } from '@/lib/sanitize';
+import { emptyToNull, dateOrNull, logDbError } from '@/lib/sanitize';
 import { OrderStatus, FinancialStatus, PaymentStatus } from '@/lib/enums';
 import { deductInventoryForOrderInTransaction } from './order-stock-service';
 import { insertOrderTimeline } from './order-timeline';
@@ -211,7 +212,16 @@ const [countRows] = await db.$client.execute(
     }
   }
 
-  const shippingCost = Number(input.shipping_cost || 0);
+  // Shipping is priced from the selected zone on the server; a client-sent
+  // shipping_cost is ignored so the buyer cannot choose their own fee.
+  let shippingCost = 0;
+  const deliveryZoneId = emptyToNull(input.delivery_zone_id);
+  if (deliveryZoneId) {
+    const [zone] = await db.select().from(deliveryZones)
+      .where(and(eq(deliveryZones.id, deliveryZoneId), eq(deliveryZones.is_active, true))).limit(1);
+    if (!zone) throw new ValidationError('Delivery zone is not available');
+    shippingCost = computeZoneShipping(zone, subtotal - discountAmount);
+  }
   const totalAmount = Math.max(0, subtotal - discountAmount + shippingCost).toFixed(2);
 
   await db.transaction(async (tx) => {
@@ -220,8 +230,8 @@ const [countRows] = await db.$client.execute(
       order_no: orderNo,
       user_id: input.user_id,
       source: input.source || 'web',
-      delivery_zone_id: emptyToNull(input.delivery_zone_id),
-      shipping_cost: moneyOrZero(input.shipping_cost),
+      delivery_zone_id: deliveryZoneId,
+      shipping_cost: shippingCost.toFixed(2),
       delivery_date: dateOrNull(input.delivery_date),
       delivery_time_slot: emptyToNull(input.delivery_time_slot),
       status: OrderStatus.Pending,

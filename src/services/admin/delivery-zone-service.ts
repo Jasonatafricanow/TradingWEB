@@ -13,6 +13,17 @@ export interface DeliveryZoneInput {
   sort_order?: number;
 }
 
+/** Shipping for a zone: free above free_shipping_min, otherwise base_rate. */
+export function computeZoneShipping(
+  zone: { base_rate: string | number; free_shipping_min: string | number | null },
+  amountAfterDiscount: number,
+): number {
+  const freeMin = zone.free_shipping_min == null ? 0 : Number(zone.free_shipping_min);
+  if (freeMin > 0 && amountAfterDiscount >= freeMin) return 0;
+  const rate = Number(zone.base_rate);
+  return Number.isFinite(rate) && rate > 0 ? Math.round(rate * 100) / 100 : 0;
+}
+
 export async function listDeliveryZones(activeOnly = false) {
   try {
     const query = activeOnly

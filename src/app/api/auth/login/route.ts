@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { hashPassword, verifyPassword, signToken } from "@/lib/auth-local"
+import { signSessionToken } from "@/services/auth/auth-service"
 import { checkRateLimit, getClientIp, RATE_LIMITS } from "@/lib/rate-limit"
 import { IS_DEMO_MODE } from "@/config/constants"
 import { AUTH_API_MESSAGES } from "@/lib/auth-api-messages"
@@ -85,7 +86,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: AUTH_API_MESSAGES.invalidCredentials }, { status: 401 })
     }
 
-    const token = signToken({ sub: user.id, email: user.email })
+    const token = signSessionToken(user, user.password_hash)
     return NextResponse.json({
       data: {
         token,

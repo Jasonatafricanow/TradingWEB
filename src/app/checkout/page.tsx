@@ -67,7 +67,7 @@ export default function CheckoutPage() {
   const [shippingCost, setShippingCost] = useState(0);
 
   useEffect(() => {
-    fetch("/api/admin/delivery-zones?active=true")
+    fetch("/api/delivery-zones")
       .then(r => r.json())
       .then(j => setDeliveryZones(j.data || []))
       .catch(() => {});

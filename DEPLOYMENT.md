@@ -65,14 +65,14 @@ mysql -u <user> -p <db> -e "DESC payment_methods;"
 ```bash
 # Linux crontab
 CRON_SECRET="<与 .env 一致的密钥>"
-*/60 * * * * curl -s -X POST "https://fjglobal.online/api/cron/expire-offline-orders?key=$CRON_SECRET"
+*/60 * * * * curl -s -X POST -H "x-cron-secret: $CRON_SECRET" "https://fjglobal.online/api/cron/expire-offline-orders"
 ```
 
 ### 3.2 每日运营简报（/api/cron/daily-briefing）
 每天 08:00 执行，推送昨日订单/收入/异常摘要。
 
 ```bash
-0 8 * * * curl -s -X POST "https://fjglobal.online/api/cron/daily-briefing?key=$CRON_SECRET"
+0 8 * * * curl -s -X POST -H "x-cron-secret: $CRON_SECRET" "https://fjglobal.online/api/cron/daily-briefing"
 ```
 
 ---

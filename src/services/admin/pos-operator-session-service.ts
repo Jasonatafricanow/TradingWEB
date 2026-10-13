@@ -49,8 +49,29 @@ export interface PinFailureState {
   pinLockedUntil: Date | null;
 }
 
+export interface PinReservation {
+  allowed: boolean;
+  attempt: number;
+  state: PinFailureState;
+}
+
+export interface PinAttemptState {
+  pinFailedAttempts: number;
+  pinLastFailedAt: Date | null;
+  pinLockedUntil: Date | null;
+}
+
 export interface PosOperatorSessionRepository {
   findStaff(staffId: string): Promise<OperatorStaffRecord | null>;
+  /**
+   * Atomically read the staff member's PIN attempt state, apply `reserve`, and
+   * persist the returned state (row-locked), so concurrent requests cannot all
+   * pass the lockout check before any failure is recorded.
+   */
+  reservePinAttempt(
+    staffId: string,
+    reserve: (current: PinAttemptState) => PinReservation,
+  ): Promise<PinReservation>;
   savePinFailure(staffId: string, state: PinFailureState): Promise<void>;
   resetPinFailures(staffId: string): Promise<void>;
   revokeActiveDeviceSessions(staffId: string, storeId: string, deviceId: string, revokedAt: Date): Promise<void>;
@@ -87,6 +108,27 @@ const databaseRepository: PosOperatorSessionRepository = {
       pinLockedUntil: staff.pos_pin_locked_until,
     }).from(staff).where(eq(staff.id, staffId)).limit(1);
     return row ? { ...row, permissions: permissions(row.permissions) } : null;
+  },
+  async reservePinAttempt(staffId, reserve) {
+    return db.transaction(async (tx) => {
+      const [row] = await tx.select({
+        pinFailedAttempts: staff.pos_pin_failed_attempts,
+        pinLastFailedAt: staff.pos_pin_last_failed_at,
+        pinLockedUntil: staff.pos_pin_locked_until,
+      }).from(staff).where(eq(staff.id, staffId)).for("update").limit(1);
+      if (!row) throw new PosOperatorSessionError("STAFF_NOT_FOUND", 404);
+      const reservation = reserve({
+        pinFailedAttempts: row.pinFailedAttempts ?? 0,
+        pinLastFailedAt: row.pinLastFailedAt,
+        pinLockedUntil: row.pinLockedUntil,
+      });
+      await tx.update(staff).set({
+        pos_pin_failed_attempts: reservation.state.pinFailedAttempts,
+        pos_pin_last_failed_at: reservation.state.pinLastFailedAt,
+        pos_pin_locked_until: reservation.state.pinLockedUntil,
+      }).where(eq(staff.id, staffId));
+      return reservation;
+    });
   },
   async savePinFailure(staffId, state) {
     await db.update(staff).set({
@@ -150,6 +192,42 @@ const databaseRepository: PosOperatorSessionRepository = {
   },
 };
 
+/**
+ * Decide whether one more PIN attempt may be verified. Five attempts per
+ * 15-minute window; once a lock expires exactly one further attempt is
+ * allowed before the next lock (same cadence as before, now race-free).
+ */
+export function reservePinAttempt(current: PinAttemptState, now: Date): PinReservation {
+  const nowMs = now.getTime();
+  if (current.pinLockedUntil && current.pinLockedUntil.getTime() > nowMs) {
+    return {
+      allowed: false,
+      attempt: current.pinFailedAttempts,
+      state: { ...current, pinLastFailedAt: current.pinLastFailedAt ?? now },
+    };
+  }
+  const withinWindow = Boolean(current.pinLastFailedAt)
+    && nowMs - current.pinLastFailedAt!.getTime() <= PIN_FAILURE_WINDOW_MS;
+  // A lock that has expired inside the window allows one more attempt only.
+  const attempt = !withinWindow
+    ? 1
+    : current.pinLockedUntil
+      ? PIN_MAX_FAILURES
+      : current.pinFailedAttempts + 1;
+  if (attempt > PIN_MAX_FAILURES) {
+    return {
+      allowed: false,
+      attempt: PIN_MAX_FAILURES,
+      state: { pinFailedAttempts: PIN_MAX_FAILURES, pinLastFailedAt: now, pinLockedUntil: new Date(nowMs + PIN_LOCK_MS) },
+    };
+  }
+  return {
+    allowed: true,
+    attempt,
+    state: { pinFailedAttempts: attempt, pinLastFailedAt: now, pinLockedUntil: null },
+  };
+}
+
 export async function createOperatorSession(
   input: {
     accountUserId: string;
@@ -169,23 +247,20 @@ export async function createOperatorSession(
   if (!member.posEnabled) throw new PosOperatorSessionError("POS_DISABLED", 403);
   if (member.storeId !== input.storeId) throw new PosOperatorSessionError("STORE_MISMATCH", 403);
   if (!member.pinHash) throw new PosOperatorSessionError("PIN_NOT_CONFIGURED", 403);
-  if (member.pinLockedUntil && member.pinLockedUntil.getTime() > now.getTime()) {
-    throw new PosOperatorSessionError("PIN_LOCKED", 429);
-  }
+  // Count the attempt before verifying: every request that reaches
+  // verifyPosPin has already consumed one of the PIN_MAX_FAILURES slots.
+  const reservation = await repository.reservePinAttempt(member.id, (current) => reservePinAttempt(current, now));
+  if (!reservation.allowed) throw new PosOperatorSessionError("PIN_LOCKED", 429);
 
   if (!verifyPosPin(input.pin, member.pinHash)) {
-    const withinWindow = member.pinLastFailedAt
-      && now.getTime() - member.pinLastFailedAt.getTime() <= PIN_FAILURE_WINDOW_MS;
-    const attempts = (withinWindow ? member.pinFailedAttempts : 0) + 1;
-    const lockedUntil = attempts >= PIN_MAX_FAILURES
-      ? new Date(now.getTime() + PIN_LOCK_MS)
-      : null;
-    await repository.savePinFailure(member.id, {
-      pinFailedAttempts: attempts,
-      pinLastFailedAt: now,
-      pinLockedUntil: lockedUntil,
-    });
-    throw new PosOperatorSessionError(lockedUntil ? "PIN_LOCKED" : "PIN_INVALID", lockedUntil ? 429 : 403);
+    if (reservation.attempt >= PIN_MAX_FAILURES) {
+      await repository.savePinFailure(member.id, {
+        ...reservation.state,
+        pinLockedUntil: new Date(now.getTime() + PIN_LOCK_MS),
+      });
+      throw new PosOperatorSessionError("PIN_LOCKED", 429);
+    }
+    throw new PosOperatorSessionError("PIN_INVALID", 403);
   }
 
   await repository.resetPinFailures(member.id);

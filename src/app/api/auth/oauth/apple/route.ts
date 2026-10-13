@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { verifyAppleAuthorizationCode, findOrCreateUser } from "@/lib/oauth"
-import { signToken } from "@/lib/auth-local"
+import { signSessionToken } from "@/services/auth/auth-service"
 
 export async function POST(request: NextRequest) {
   try {
@@ -20,11 +20,7 @@ export async function POST(request: NextRequest) {
     const result = await findOrCreateUser(appleUser.email, name)
 
     // Issue our JWT
-    const token = signToken({
-      sub: result.id,
-      email: result.email,
-      role: "customer",
-    })
+    const token = signSessionToken(result, result.passwordHash)
 
     return NextResponse.json({
       data: {

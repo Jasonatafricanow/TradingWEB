@@ -1,20 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { refreshExchangeRates } from "@/services/exchange-rate-service"
+import { isAuthorizedCronRequest } from "@/lib/cron-auth"
 
 export const dynamic = "force-dynamic"
-
-function isAuthorizedCronRequest(request: NextRequest): boolean {
-  const expectedSecret = process.env.CRON_SECRET
-  if (!expectedSecret) return false
-
-  const authHeader = request.headers.get("authorization")
-  const bearer = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null
-  const providedSecret =
-    request.headers.get("x-cron-secret") ||
-    request.nextUrl.searchParams.get("key") ||
-    bearer
-  return providedSecret === expectedSecret
-}
 
 async function handleUpdate(request: NextRequest) {
   if (!isAuthorizedCronRequest(request)) {
