@@ -17,6 +17,7 @@ export const enSales = {
   "orders.cancel_confirm": "Cancel order {orderNumber}?",
   "orders.cancelled": "Order cancelled",
   "orders.cancel_failed": "Order could not be cancelled. Please try again.",
+  "orders.invoice_load_failed": "Could not load the invoice. Please try again.",
   "orders.item_quantity": "{type} × {count}",
   "orders.currency_unavailable": "currency unavailable",
   "orders.status.pending": "Pending",

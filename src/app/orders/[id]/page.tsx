@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation"
 import { useI18n } from "@/contexts/i18n-context"
 import { useAuth } from "@/contexts/auth-context"
 import { apiFetch, openAuthenticatedHtml } from "@/lib/client-api"
+import { translate } from "@/i18n"
 import { canCancelPendingOrder, canRepayOrder, getRepaymentProvider } from "@/lib/order-payment"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -113,7 +114,7 @@ export default function OrderDetailPage() {
     try {
       await openAuthenticatedHtml(`/api/orders/${id}/invoice`, target)
     } catch {
-      toast.error(locale === "zh" ? "发票加载失败，请稍后重试" : "Could not load the invoice")
+      toast.error(translate(locale, "orders.invoice_load_failed"))
     }
   }
 
