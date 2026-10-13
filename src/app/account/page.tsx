@@ -53,6 +53,7 @@ export default function AccountPage() {
   const { user, getToken } = useAuth();
   const { t, locale } = useI18n();
   const [name, setName] = useState("");
+  const [renderedAt] = useState(() => Date.now());
   const [saving, setSaving] = useState(false);
   const [membership, setMembership] = useState<MembershipInfo | null>(null);
   const [wallet, setWallet] = useState<WalletInfo | null>(null);
@@ -85,7 +86,7 @@ export default function AccountPage() {
   const [addrForm, setAddrForm] = useState({ label: "", phone: "", address_line1: "", address_line2: "", city: "", state: "", zip: "", country: "Moz", is_default: false })
   const [addrOpen, setAddrOpen] = useState(false)
 
-  const fetchAddresses = async () => {
+  async function fetchAddresses() {
     try {
       const res = await fetch("/api/addresses")
       const json = await res.json()
@@ -261,7 +262,7 @@ export default function AccountPage() {
             ) : (
               <div className="space-y-3">
                 {coupons.map((coupon) => {
-                  const daysLeft = Math.ceil((new Date(coupon.expires_at).getTime() - Date.now()) / 86400000);
+                  const daysLeft = Math.ceil((new Date(coupon.expires_at).getTime() - renderedAt) / 86400000);
                   return (
                     <div
                       key={coupon.id}

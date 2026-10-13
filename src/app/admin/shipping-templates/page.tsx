@@ -154,7 +154,7 @@ export default function AdminShippingTemplatesPage() {
     } catch { toast.error("操作失败") }
   }
 
-  const loadZones = async () => {
+  async function loadZones() {
     try {
       const res = await fetch("/api/admin/delivery-zones")
       const json = await res.json()
