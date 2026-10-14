@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
+import { isSessionRejected } from "@/lib/session-check";
 
 interface LocalUser {
   id: string
@@ -60,7 +61,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     })
       .then((res) => {
         if (!res.ok) {
-          clearStoredToken()
+          if (isSessionRejected(res.status)) clearStoredToken()
           return null
         }
         return res.json()
@@ -69,7 +70,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(json?.data || null)
       })
       .catch(() => {
-        clearStoredToken()
+        // Network error or request aborted by a reload/navigation: keep the
+        // token so a transient failure does not sign the user out.
       })
       .finally(() => setLoading(false))
   }, [])
