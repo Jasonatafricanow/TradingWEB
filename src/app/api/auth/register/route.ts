@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { hashPassword, signToken } from "@/lib/auth-local"
+import { signSessionToken } from "@/services/auth/auth-service"
 import { randomUUID } from "node:crypto"
 import { IS_DEMO_MODE } from "@/config/constants"
 
@@ -41,7 +42,7 @@ export async function POST(request: NextRequest) {
       [id, email, name || null, passwordHash]
     )
 
-    const token = signToken({ sub: id, email })
+    const token = signSessionToken({ id, email }, passwordHash)
     return NextResponse.json({
       data: { token, user: { id, email, name: name || null } }
     })

@@ -19,6 +19,7 @@ export const zhSales = {
   "orders.cancel_confirm": "确定取消订单 {orderNumber} 吗？",
   "orders.cancelled": "订单已取消",
   "orders.cancel_failed": "无法取消订单，请重试。",
+  "orders.invoice_load_failed": "发票加载失败，请重试。",
   "orders.item_quantity": "{type} × {count}",
   "orders.currency_unavailable": "币种不可用",
   "orders.status.pending": "待支付",

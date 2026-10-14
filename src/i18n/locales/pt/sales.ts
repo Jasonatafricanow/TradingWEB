@@ -19,6 +19,7 @@ export const ptSales = {
   "orders.cancel_confirm": "Cancelar o pedido {orderNumber}?",
   "orders.cancelled": "Pedido cancelado",
   "orders.cancel_failed": "Não foi possível cancelar o pedido. Tente novamente.",
+  "orders.invoice_load_failed": "Não foi possível carregar a fatura. Tente novamente.",
   "orders.item_quantity": "{type} × {count}",
   "orders.currency_unavailable": "moeda indisponível",
   "orders.status.pending": "Pendente",

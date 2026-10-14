@@ -26,8 +26,13 @@ export async function verifyGoogleToken(idToken: string) {
   if (!payload || !payload.email) {
     throw new Error("Invalid Google token")
   }
+  // findOrCreateUser links by email, so an unverified address would let a
+  // Google account that merely claims someone's email sign in as them.
+  if (payload.email_verified !== true) {
+    throw new Error("Google account email is not verified")
+  }
   return {
-    email: payload.email,
+    email: payload.email.trim().toLowerCase(),
     name: payload.name || payload.email.split("@")[0],
     avatar: payload.picture || null,
     googleId: payload.sub,
@@ -126,7 +131,13 @@ export async function findOrCreateUser(email: string, name: string) {
     if (!existing.name && name) {
       await db.update(users).set({ name }).where(eq(users.id, existing.id))
     }
-    return { id: existing.id, email: existing.email, name: existing.name || name, isNew: false }
+    return {
+      id: existing.id,
+      email: existing.email,
+      name: existing.name || name,
+      passwordHash: existing.password_hash ?? null,
+      isNew: false,
+    }
   }
 
   // Create new user with minimal info
@@ -138,5 +149,5 @@ export async function findOrCreateUser(email: string, name: string) {
     is_active: true,
   })
 
-  return { id, email, name, isNew: true }
+  return { id, email, name, passwordHash: null, isNew: true }
 }

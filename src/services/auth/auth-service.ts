@@ -1,7 +1,13 @@
 /**
  * 本地认证服务 — 使用 JWT + 数据库
  */
-import { signToken, verifyToken, type JwtPayload } from "@/lib/auth-local"
+import {
+  passwordResetVersion,
+  safeTimingEqualString,
+  signToken,
+  verifyToken,
+  type JwtPayload,
+} from "@/lib/auth-local"
 import { IS_DEMO_MODE } from "@/config/constants"
 
 export interface AuthenticatedUser {
@@ -17,6 +23,8 @@ export interface AuthUserRecord {
   email: string
   name: string | null
   is_active: boolean | number
+  /** Present when the repository loads it; used to revoke sessions on password change. */
+  password_hash?: string | null
 }
 
 export interface AuthStaffRecord {
@@ -40,8 +48,18 @@ export async function resolveAuthenticatedUser(
   payload: JwtPayload,
   repository: AuthRepository,
 ): Promise<AuthenticatedUser | null> {
+  // Reset links share the signing key but must never act as a session.
+  if (payload.role === "password_reset") return null
+
   const user = await repository.findUserById(payload.sub)
   if (!user || !Boolean(user.is_active)) return null
+
+  // Sessions carry the credential version they were issued under; changing
+  // the password changes it and ends every older session. Tokens issued
+  // before this check existed have no pwdv and lapse at their normal expiry.
+  if (payload.pwdv !== undefined && user.password_hash !== undefined) {
+    if (!safeTimingEqualString(payload.pwdv, passwordResetVersion(user.password_hash))) return null
+  }
 
   let role: string | undefined
   let staffId: string | undefined
@@ -83,7 +101,7 @@ export async function getUserFromToken(token: string): Promise<AuthenticatedUser
   const repository: AuthRepository = {
     async findUserById(userId) {
       const [rows] = await db.$client.execute(
-        "SELECT id, email, name, is_active FROM users WHERE id = ? LIMIT 1",
+        "SELECT id, email, name, is_active, password_hash FROM users WHERE id = ? LIMIT 1",
         [userId],
       )
       return (rows as AuthUserRecord[])[0] ?? null
@@ -104,6 +122,11 @@ export async function getUserFromToken(token: string): Promise<AuthenticatedUser
   }
 
   return resolveAuthenticatedUser(payload, repository)
+}
+
+/** Issue a session token bound to the user's current credential version. */
+export function signSessionToken(user: { id: string; email: string }, passwordHash: string | null): string {
+  return signToken({ sub: user.id, email: user.email, pwdv: passwordResetVersion(passwordHash) })
 }
 
 export { signToken, verifyToken } from "@/lib/auth-local"

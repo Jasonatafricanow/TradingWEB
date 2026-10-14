@@ -2,14 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { generateBriefing, renderBriefingHtml } from "@/services/cron/briefing-service"
 import { sendEmail } from "@/services/notifications/email-service"
 import { SITE } from "@/config/site"
-
-function isAuthorizedCronRequest(request: NextRequest): boolean {
-  const expectedSecret = process.env.CRON_SECRET
-  if (!expectedSecret) return false
-
-  const providedSecret = request.headers.get("x-cron-secret") || request.nextUrl.searchParams.get("key")
-  return providedSecret === expectedSecret
-}
+import { isAuthorizedCronRequest } from "@/lib/cron-auth"
 
 async function handleBriefing(request: NextRequest) {
   if (!isAuthorizedCronRequest(request)) {

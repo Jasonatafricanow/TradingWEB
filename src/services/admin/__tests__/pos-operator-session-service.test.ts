@@ -17,6 +17,16 @@ let sessions: OperatorSessionRecord[];
 function repository(): PosOperatorSessionRepository {
   return {
     findStaff: async (staffId) => staff.id === staffId ? staff : null,
+    reservePinAttempt: async (_staffId, reserve) => {
+      // Mirrors the row lock: read-modify-write happens in one step.
+      const reservation = reserve({
+        pinFailedAttempts: staff.pinFailedAttempts,
+        pinLastFailedAt: staff.pinLastFailedAt,
+        pinLockedUntil: staff.pinLockedUntil,
+      });
+      staff = { ...staff, ...reservation.state };
+      return reservation;
+    },
     savePinFailure: async (_staffId, state) => {
       staff = { ...staff, ...state };
     },
@@ -119,6 +129,40 @@ describe("createOperatorSession", () => {
     }, repo, now)).rejects.toMatchObject({ code: "PIN_LOCKED" });
     expect(staff.pinFailedAttempts).toBe(5);
     expect(staff.pinLockedUntil?.toISOString()).toBe("2026-07-15T08:01:00.000Z");
+  });
+});
+
+describe("PIN brute-force resistance", () => {
+  const attempt = (pin: string, repo: PosOperatorSessionRepository, at = now) => createOperatorSession({
+    accountUserId: "user-1",
+    staffId: "staff-1",
+    storeId: "store-1",
+    deviceId: "android-install-1",
+    pin,
+  }, repo, at);
+
+  it("does not let concurrent guesses bypass the five-attempt limit", async () => {
+    const repo = repository();
+    const guesses = ["0000", "1111", "2222", "3333", "4444", "5555", "6666", "1234", "7777", "8888"];
+    const results = await Promise.allSettled(guesses.map((pin) => attempt(pin, repo)));
+
+    // The correct PIN is the 8th concurrent guess: it must not get through.
+    expect(results[7].status).toBe("rejected");
+    expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(0);
+    expect(staff.pinLockedUntil?.toISOString()).toBe("2026-07-15T08:01:00.000Z");
+  });
+
+  it("allows one attempt after a lock expires and a fresh window later", async () => {
+    const repo = repository();
+    for (let i = 0; i < 5; i++) await attempt("9999", repo).catch(() => undefined);
+
+    const afterLock = new Date(now.getTime() + 61_000);
+    await expect(attempt("9999", repo, afterLock)).rejects.toMatchObject({ code: "PIN_LOCKED" });
+    await expect(attempt("1234", repo, new Date(afterLock.getTime() + 1_000))).rejects.toMatchObject({ code: "PIN_LOCKED" });
+
+    const nextWindow = new Date(now.getTime() + 20 * 60_000);
+    await expect(attempt("1234", repo, nextWindow)).resolves.toMatchObject({ operator: { staffId: "staff-1" } });
+    expect(staff.pinFailedAttempts).toBe(0);
   });
 });
 

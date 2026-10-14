@@ -1,17 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-
-/**
- * 验证 cron 请求来源 — 与 daily-briefing 共用 CRON_SECRET。
- */
-function isAuthorizedCronRequest(request: NextRequest): boolean {
-  const expectedSecret = process.env.CRON_SECRET;
-  if (!expectedSecret) return false;
-  const providedSecret =
-    request.headers.get("x-cron-secret") ||
-    request.nextUrl.searchParams.get("key");
-  return providedSecret === expectedSecret;
-}
+import { isAuthorizedCronRequest } from "@/lib/cron-auth";
 
 /**
  * POST /api/cron/expire-offline-orders

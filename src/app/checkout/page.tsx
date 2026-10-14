@@ -65,9 +65,10 @@ export default function CheckoutPage() {
   const [deliveryDate, setDeliveryDate] = useState("");
   const [deliveryTimeSlot, setDeliveryTimeSlot] = useState("");
   const [shippingCost, setShippingCost] = useState(0);
+  const [renderedAt] = useState(() => Date.now());
 
   useEffect(() => {
-    fetch("/api/admin/delivery-zones?active=true")
+    fetch("/api/delivery-zones")
       .then(r => r.json())
       .then(j => setDeliveryZones(j.data || []))
       .catch(() => {});
@@ -379,7 +380,7 @@ export default function CheckoutPage() {
                 const zone = deliveryZones.find(z => z.id === selectedZone);
                 const slots = zone?.time_slots;
                 const slotList = Array.isArray(slots) ? slots : [];
-                const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
+                const tomorrow = new Date(renderedAt + 86400000).toISOString().split('T')[0];
                 return (
                   <>
                     <div>
