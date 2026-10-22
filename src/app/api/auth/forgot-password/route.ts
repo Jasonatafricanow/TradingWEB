@@ -43,6 +43,22 @@ export async function POST(request: NextRequest) {
       })
     }
 
+    // Validate deployment configuration before looking up the account so a
+    // configuration error cannot reveal whether the email is registered.
+    let siteUrl: URL
+    try {
+      siteUrl = new URL(process.env.NEXT_PUBLIC_SITE_URL?.trim() || "")
+      if (!['http:', 'https:'].includes(siteUrl.protocol)
+        || siteUrl.username || siteUrl.password || siteUrl.search || siteUrl.hash) {
+        throw new Error("Invalid reset destination")
+      }
+    } catch {
+      return NextResponse.json(
+        { error: AUTH_API_MESSAGES.resetUnavailable },
+        { status: 503 },
+      )
+    }
+
     const { db } = await import("@/lib/db")
     const [rows] = await db.$client.execute(
       "SELECT id, email, password_hash FROM users WHERE email = ? LIMIT 1",
@@ -58,7 +74,7 @@ export async function POST(request: NextRequest) {
         role: "password_reset",
         pwdv: passwordResetVersion(user.password_hash),
       }, "15m")
-      const resetUrl = `${process.env.NEXT_PUBLIC_SITE_URL || "https://fjglobal.online"}/auth/reset-password?token=${resetToken}`
+      const resetUrl = `${siteUrl.href.replace(/\/+$/, "")}/auth/reset-password?token=${resetToken}`
 
       try {
         const { sendPasswordResetEmail } = await import("@/services/notifications/email-service")
