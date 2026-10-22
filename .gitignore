@@ -103,6 +103,7 @@ Desktop.ini
 
 # Temporary migration scripts
 scripts/*.mjs
+!scripts/test-node.mjs
 
 # Backup directories
 src/services-BACKUP*/
