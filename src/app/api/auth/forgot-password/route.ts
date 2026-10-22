@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
       }
     } catch {
       return NextResponse.json(
-        { error: "Password reset is not configured (invalid NEXT_PUBLIC_SITE_URL)" },
+        { error: AUTH_API_MESSAGES.resetUnavailable },
         { status: 503 },
       )
     }
