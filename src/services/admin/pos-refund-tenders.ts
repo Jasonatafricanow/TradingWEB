@@ -37,6 +37,12 @@ export interface RefundTenderBasis {
 
 export const EXCHANGE_CREDIT_METHOD = 'exchange_credit';
 const CASH = 'cash';
+const CASH_LABEL = 'Cash';
+
+/** Tender method codes and labels are machine values (like 'Exchange credit'), not UI copy. */
+function tender(method: string, label: string, cents: number): RefundTender {
+  return { method, label, amount: formatCents(cents) };
+}
 
 export function allocateRefundTenders(amountCents: number, basis: RefundTenderBasis): RefundTender[] {
   if (amountCents <= 0) return [];
@@ -48,7 +54,7 @@ export function allocateRefundTenders(amountCents: number, basis: RefundTenderBa
   }
   if (byMethod.size === 0) {
     const method = basis.legacyMethod && basis.legacyMethod !== 'split' ? basis.legacyMethod : CASH;
-    return [{ method, label: method, amount: formatCents(amountCents) }];
+    return [tender(method, method, amountCents)];
   }
   for (const [method, entry] of byMethod) {
     entry.remaining = Math.max(0, entry.paid - (basis.refundedByMethod.get(method) ?? 0));
@@ -80,12 +86,12 @@ export function allocateRefundTenders(amountCents: number, basis: RefundTenderBa
   }
 
   const result = shares.filter((share) => share.cents > 0)
-    .map((share) => ({ method: share.method, label: byMethod.get(share.method)!.label, amount: formatCents(share.cents) }));
+    .map((share) => tender(share.method, byMethod.get(share.method)!.label, share.cents));
   const unabsorbed = amountCents - allocatable;
   if (unabsorbed > 0) {
     const cash = result.find((tender) => tender.method === CASH);
     if (cash) cash.amount = formatCents(parseMoneyToCents(cash.amount) + unabsorbed);
-    else result.push({ method: CASH, label: 'Cash', amount: formatCents(unabsorbed) });
+    else result.push(tender(CASH, CASH_LABEL, unabsorbed));
   }
   return result;
 }
