@@ -180,6 +180,21 @@ CRON_SECRET="<与 .env 一致的密钥>"
 
 ---
 
+## □ 3b. Nginx 限流
+
+```bash
+# 服务器上，以 root 运行（直接连源站）
+sh scripts/rate-limit-nginx.sh
+# 前面有 CDN / 反向代理时，必须给出可信代理网段，否则所有访客共用代理 IP 的同一个限流桶
+TRUSTED_PROXY_CIDRS="<代理网段，空格分隔>" REAL_IP_HEADER=CF-Connecting-IP sh scripts/rate-limit-nginx.sh
+```
+
+- 配置在 `deploy/nginx/`：限流区装到 `conf.d/`，限流 location 和代理设置装到 `snippets/`，站点配置里只插入一行 include（插在第一个 `location /` 之前，原文件备份为 `.bak-ratelimit`）。
+- 限额：`/api/auth/*` 10 次/分（突发 5），`/api/payment/create` 与 `/api/orders` 20 次/分（突发 10），其他 `/api/*` 60 次/分（突发 40），超出返回 429；支付回调 `/api/payment/webhook`、`/api/payment/callback` 和前台页面不限流。
+- nginx 会把 `X-Forwarded-For` 覆盖为真实客户端 IP，所以应用 `.env` 可以设 `TRUST_PROXY_HEADERS=true`，让应用内按 IP 的限流生效。
+- 旧版脚本把限流区写进了一行注释，实际从未生效；新脚本会清掉那行和引用不存在的 `zone=api` 的行，可以重复运行。
+- 已在本地 nginx 1.28 上用真实请求验证上述行为；线上需要在执行后再用 `curl` 抽查一次 429。
+
 ## □ 4. 首次启动准备
 
 ### 4.1 创建第一个管理员
