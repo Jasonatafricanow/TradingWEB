@@ -20,6 +20,7 @@ export default defineConfig({
       "src/app/api/admin/pos/__tests__/**/*.test.ts",
       "src/app/api/auth/__tests__/**/*.test.ts",
       "src/lib/__tests__/version.test.ts",
+      "src/lib/__tests__/csv-stream.test.ts",
       "scripts/**/*.test.ts",
     ],
   },
