@@ -44,6 +44,7 @@ const fulfillmentSchema = z.discriminatedUnion("method", [
 ]);
 
 export const posCheckoutRequestV1Schema = z.object({
+  approval_token: identifier.optional(),
   idempotency_key: identifier,
   store_id: identifier,
   currency: z.string().regex(/^[A-Z]{3}$/, "must be a three-letter uppercase currency code"),

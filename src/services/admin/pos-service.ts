@@ -1,3 +1,5 @@
+import { consumeApprovalToken } from "./pos-approval-service";
+import { posTransaction } from "./pos-idempotency-service";
 import { db } from '@/lib/db';
 import { asc, eq } from 'drizzle-orm';
 import { orders, orderItems, orderTimeline, paymentMethods, stores } from '@/storage/database/shared/schema';
@@ -9,7 +11,7 @@ import { allocateInventory } from '@/services/inventory/inventory-allocation-ser
 import { formatCents, parseMoneyToCents } from '@/services/orders/order-money';
 import { hashPosRequest, type PosCheckoutRequestV1, type PosOrderDto } from './pos-contracts';
 import { PosApiError } from './pos-errors';
-import { parsePosTaxRateBps } from './pos-store-config';
+import { parseUnapprovedDiscountBps, parsePosTaxRateBps } from './pos-store-config';
 import { runIdempotent, type IdempotencyCompletion, type IdempotencyInput } from './pos-idempotency-service';
 import type { PosOperatorContext } from './pos-operator-session-service';
 import { enqueuePosAuditEvent, type EnqueuePosAuditEvent } from './pos-audit-outbox-service';
@@ -197,6 +199,7 @@ export interface PosCheckoutStore {
   status: string;
   currency: string;
   taxRateBps: number;
+  maxUnapprovedDiscountBps?: number;
   pricingVersion: string;
   paymentMethods: string[];
 }
@@ -215,6 +218,7 @@ interface PosOrderItemInsert extends Record<string, unknown> {
 }
 
 export interface PosCheckoutDependencies {
+  consumeApprovalToken: typeof consumeApprovalToken;
   getStore(storeId: string): Promise<PosCheckoutStore | null>;
   validateFulfillment: typeof validateFulfillment;
   priceOrder(input: PriceOrderInput, tx: DbTx): Promise<PricedOrder>;
@@ -248,6 +252,7 @@ function metadataObject(value: unknown): Record<string, unknown> {
 }
 
 const databaseCheckoutDependencies: PosCheckoutDependencies = {
+  consumeApprovalToken,
   async getStore(storeId) {
     const [store] = await db.select({
       id: stores.id,
@@ -267,6 +272,7 @@ const databaseCheckoutDependencies: PosCheckoutDependencies = {
       status: store.status,
       currency: typeof metadata.currency === 'string' ? metadata.currency : 'USD',
       taxRateBps: parsePosTaxRateBps(metadata.tax_rate),
+      maxUnapprovedDiscountBps: parseUnapprovedDiscountBps(metadata.max_unapproved_discount_bps),
       pricingVersion: typeof metadata.pricing_version === 'string' ? metadata.pricing_version : 'pos-v1',
       paymentMethods: methods.map((method) => method.code),
     };
@@ -274,7 +280,7 @@ const databaseCheckoutDependencies: PosCheckoutDependencies = {
   validateFulfillment,
   priceOrder: (input, tx) => priceOrder(input, undefined, tx),
   runIdempotent,
-  transaction: (work) => db.transaction(work),
+  transaction: (work) => posTransaction(work),
   findOpenShiftId,
   async insertOrder(input, tx) {
     await tx.insert(orders).values(input as typeof orders.$inferInsert);
@@ -339,7 +345,7 @@ export async function posCheckout(
     }
   }
   const fulfillment = dependencies.validateFulfillment(input.fulfillment);
-  const { account_user_id: _accountUserId, operator: _operator, ...request } = input;
+  const { account_user_id: _accountUserId, operator: _operator, approval_token: approvalToken, ...request } = input;
   void _accountUserId;
   void _operator;
 
@@ -354,6 +360,14 @@ export async function posCheckout(
       order_discount: input.order_discount,
       tax_rate_bps: store.taxRateBps,
     }, tx);
+    const maximum = store.maxUnapprovedDiscountBps ?? 0;
+    const exceeds = priced.lines.some(line => parseMoneyToCents(line.lineDiscount) * 10000 > parseMoneyToCents(line.unitPrice) * line.quantity * maximum)
+      || parseMoneyToCents(combinedDiscount(priced)) * 10000 > parseMoneyToCents(priced.subtotal) * maximum;
+    if (exceeds) {
+      if (!approvalToken) throw new PosApiError('DISCOUNT_APPROVAL_REQUIRED', 'Discount requires independent approval', 403, false, { resource_hash: hashPosRequest(request), operation: 'checkout_discount' });
+      const approvedBy = await dependencies.consumeApprovalToken(approvalToken, 'checkout_discount', hashPosRequest(request), input.store_id, tx);
+      if (approvedBy === input.operator.staffId) throw new PosApiError('INDEPENDENT_APPROVER_REQUIRED', 'Discount must be approved by another staff member', 403);
+    }
     const preview = authoritativePreview(priced);
     if (JSON.stringify(preview) !== JSON.stringify(input.pricing_preview)) {
       throw new PosApiError('PRICING_CHANGED', 'Authoritative pricing changed', 409, false, preview);

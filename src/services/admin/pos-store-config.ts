@@ -5,3 +5,8 @@ export function parsePosTaxRateBps(value: unknown): number {
   const bps = Math.round(parsed <= 1 ? parsed * 10_000 : parsed * 100);
   return Math.min(bps, 10_000);
 }
+
+export function parseUnapprovedDiscountBps(value: unknown): number {
+  const number = typeof value === 'number' || typeof value === 'string' ? Number(value) : NaN;
+  return Number.isInteger(number) && number >= 0 && number <= 10000 ? number : 0;
+}

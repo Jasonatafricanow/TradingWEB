@@ -34,12 +34,14 @@ function dependencies() {
   const events: string[] = [];
   const tx = { kind: "tx" };
   const deps = {
+    consumeApprovalToken: vi.fn().mockResolvedValue("manager-1"),
     getStore: vi.fn().mockResolvedValue({
       id: "store-1",
       name: "Main Store",
       status: "active",
       currency: "USD",
       taxRateBps: 0,
+      maxUnapprovedDiscountBps: 2000,
       pricingVersion: "pricing-v1",
       paymentMethods: ["cash", "card"],
     }),
@@ -86,6 +88,34 @@ function dependencies() {
 beforeEach(() => vi.clearAllMocks());
 
 describe("POS checkout v1 service", () => {
+  it("requires approval for combined discounts above the store limit before writes", async () => {
+    const { deps } = dependencies();
+    deps.getStore.mockResolvedValueOnce({ ...(await deps.getStore()), maxUnapprovedDiscountBps: 1000 });
+    await expect(posCheckout(checkoutInput(), deps as never)).rejects.toMatchObject({ code: "DISCOUNT_APPROVAL_REQUIRED" });
+    expect(deps.insertOrder).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when no discount policy is configured", async () => {
+    const { deps } = dependencies();
+    deps.getStore.mockResolvedValueOnce({ ...(await deps.getStore()), maxUnapprovedDiscountBps: undefined });
+    await expect(posCheckout(checkoutInput(), deps as never)).rejects.toMatchObject({ code: "DISCOUNT_APPROVAL_REQUIRED" });
+  });
+
+  it("consumes approval in the sale transaction and excludes the token from the resource hash", async () => {
+    const { deps, tx } = dependencies();
+    deps.getStore.mockResolvedValueOnce({ ...(await deps.getStore()), maxUnapprovedDiscountBps: 0 });
+    await posCheckout({ ...checkoutInput(), approval_token: "token" }, deps as never);
+    expect(deps.consumeApprovalToken).toHaveBeenCalledWith("token", "checkout_discount", deps.runIdempotent.mock.calls[0][0].requestHash, "store-1", tx);
+  });
+
+  it("rejects self-approved discounts", async () => {
+    const { deps } = dependencies();
+    deps.getStore.mockResolvedValueOnce({ ...(await deps.getStore()), maxUnapprovedDiscountBps: 0 });
+    deps.consumeApprovalToken.mockResolvedValueOnce("staff-1");
+    await expect(posCheckout({ ...checkoutInput(), approval_token: "token" }, deps as never)).rejects.toMatchObject({ code: "INDEPENDENT_APPROVER_REQUIRED" });
+    expect(deps.insertOrder).not.toHaveBeenCalled();
+  });
+
   it("uses authoritative server pricing and writes the entire split-payment sale in one transaction", async () => {
     const input = checkoutInput();
     const { deps, events, tx } = dependencies();

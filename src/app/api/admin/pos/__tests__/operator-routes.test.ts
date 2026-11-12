@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
 const mocks = vi.hoisted(() => ({
+  execute: vi.fn(),
   requireUser: vi.fn(),
   requireStaffRole: vi.fn(),
   createOperatorSession: vi.fn(),
@@ -12,6 +13,8 @@ const mocks = vi.hoisted(() => ({
   getPosBootstrap: vi.fn(),
   searchPosCatalog: vi.fn(),
 }));
+
+vi.mock("@/lib/db", () => ({ db: { $client: { execute: mocks.execute } } }));
 
 vi.mock("@/services/auth/auth-middleware", () => ({
   requireUser: mocks.requireUser,
@@ -35,6 +38,7 @@ vi.mock("@/services/admin/pos-service", () => ({ searchPosCatalog: mocks.searchP
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.execute.mockResolvedValue([[{ store_id: "store-1" }]]);
   mocks.requireUser.mockResolvedValue({ id: "user-1", email: "a@example.test", role: "operator", staffId: "account-staff" });
   mocks.requireStaffRole.mockResolvedValue(undefined);
 });
@@ -176,4 +180,12 @@ describe("POS operator routes", () => {
     expect(mocks.searchPosCatalog).toHaveBeenCalledWith("", "store-1");
     await expect(response.json()).resolves.toEqual({ data: [{ product_id: "product-1" }] });
   });
+});
+
+it("rejects cross-store PIN requests before verification", async () => {
+  const { POST } = await import("../operator-sessions/route");
+  const response = await POST(new NextRequest("https://example.test", { method: "POST",
+    body: JSON.stringify({ staff_id: "other", store_id: "store-2", device_id: "device", pin: "1234" }) }));
+  expect(response.status).toBe(403);
+  expect(mocks.createOperatorSession).not.toHaveBeenCalled();
 });
