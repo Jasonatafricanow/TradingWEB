@@ -51,4 +51,7 @@ export const enOps = {
   "admin.security_not_enforced": "Not active yet: these options are saved but nothing in the system reads them. HTTPS and rate limiting are enforced by nginx; two-factor sign-in and session timeout are not implemented.",
   "common.go_to_page": "Go to page",
   "common.go": "Go",
+  "account.member_discount_not_applied": "Tier discount {percent}% is not applied at checkout yet",
+  "account.wallet_not_at_checkout": "Wallet balance cannot be used at checkout yet.",
+  "affiliate.commission_not_live": "Commission tracking is not live yet: orders from your link are not credited, so earnings and balance do not grow.",
 } as const;

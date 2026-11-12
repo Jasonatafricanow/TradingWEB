@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/auth-context";
 import { useI18n } from "@/contexts/i18n-context";
+import { translate } from "@/i18n";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -228,9 +229,7 @@ export default function AccountPage() {
                     <span className="text-sm font-normal text-muted-foreground ml-1">{wallet.currency}</span>
                   </div>
                   <div className="text-xs text-muted-foreground mt-1">
-                    {locale === "zh"
-                      ? "多付金额自动存入，下次消费可抵扣"
-                      : "Overpayments auto-saved. Use on next purchase."}
+                    {t("account.wallet_not_at_checkout")}
                   </div>
                 </div>
                 <div className="hidden sm:flex h-16 w-16 items-center justify-center rounded-full bg-green-50">
@@ -330,9 +329,10 @@ export default function AccountPage() {
                     <Crown className="h-5 w-5" style={{ color: membership.tier?.badge_color || "#999" }} />
                     {membership.tier?.name || (locale === "zh" ? "普通会员" : "Member")}
                   </div>
+                  {/* TW-16: checkout pricing does not apply tier discounts yet; do not promise them. */}
                   {parseFloat(membership.tier?.discount_percent || "0") > 0 && (
-                    <Badge className="mt-2 bg-green-100 text-green-700">
-                      {locale === "zh" ? `订单 ${membership.tier?.discount_percent}% 折扣` : `${membership.tier?.discount_percent}% off`}
+                    <Badge variant="outline" className="mt-2 text-muted-foreground">
+                      {translate(locale, "account.member_discount_not_applied", { percent: membership.tier?.discount_percent ?? "0" })}
                     </Badge>
                   )}
                 </div>
@@ -362,9 +362,7 @@ export default function AccountPage() {
                     {locale === "zh" ? "钱包抵扣提示" : "Wallet Tip"}
                   </div>
                   <div className="text-sm text-amber-700">
-                    {locale === "zh"
-                      ? `您有 $${wallet.balance.toFixed(2)} 余额可用于本次支付，结账时自动抵扣`
-                      : `You have $${wallet.balance.toFixed(2)} balance available for checkout`}
+                    {t("account.wallet_not_at_checkout")}
                   </div>
                 </div>
               )}

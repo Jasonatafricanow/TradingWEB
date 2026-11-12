@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/contexts/auth-context"
+import { useI18n } from "@/contexts/i18n-context"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -15,6 +16,7 @@ import { Copy, CurrencyDollar, ShareNetwork, SignOut, TrendUp, Users, Warning } 
 
 export default function AffiliateDashboardPage() {
   const router = useRouter()
+  const { t } = useI18n()
   const { user } = useAuth()
   const [affiliate, setAffiliate] = useState<any>(null)
   const [dashboard, setDashboard] = useState<any>(null)
@@ -62,6 +64,8 @@ export default function AffiliateDashboardPage() {
   return (
     <div className="mx-auto max-w-4xl px-4 py-8">
       <h1 className="text-2xl font-bold flex items-center gap-2 mb-6"><ShareNetwork className="h-6 w-6" /> 推广中心</h1>
+      {/* TW-16: no order is attributed to a referral link yet, so nothing accrues. */}
+      <Alert className="mb-6"><Warning className="h-4 w-4" /><AlertDescription>{t("affiliate.commission_not_live")}</AlertDescription></Alert>
 
       <div className="grid grid-cols-3 gap-4 mb-6">
         <Card><CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">累计收益</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-green-600">${parseFloat(affiliate.total_earned || "0").toFixed(2)}</div></CardContent></Card>

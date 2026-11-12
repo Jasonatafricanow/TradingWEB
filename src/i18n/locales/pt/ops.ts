@@ -53,4 +53,7 @@ export const ptOps = {
   "admin.security_not_enforced": "Ainda não ativo: estas opções são guardadas, mas nada no sistema as lê. HTTPS e limite de pedidos são aplicados pelo nginx; autenticação de dois fatores e tempo limite de sessão não estão implementados.",
   "common.go_to_page": "Ir para a página",
   "common.go": "Ir",
+  "account.member_discount_not_applied": "O desconto de nível de {percent}% ainda não é aplicado no checkout",
+  "account.wallet_not_at_checkout": "O saldo da carteira ainda não pode ser usado no checkout.",
+  "affiliate.commission_not_live": "O registo de comissões ainda não está ativo: as encomendas do seu link não são creditadas, por isso os ganhos e o saldo não aumentam.",
 } as const satisfies Record<keyof typeof enOps, string>;

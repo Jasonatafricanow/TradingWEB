@@ -53,4 +53,7 @@ export const zhOps = {
   "admin.security_not_enforced": "尚未启用：这些选项只会被保存，系统中没有任何地方读取。HTTPS 和限流由 nginx 负责；双重验证和会话超时尚未实现。",
   "common.go_to_page": "跳转到页码",
   "common.go": "跳转",
+  "account.member_discount_not_applied": "等级折扣 {percent}% 暂未在结账时生效",
+  "account.wallet_not_at_checkout": "钱包余额暂时不能用于结账。",
+  "affiliate.commission_not_live": "佣金结算尚未上线：通过推广链接产生的订单暂不计入佣金，收益和余额不会增加。",
 } as const satisfies Record<keyof typeof enOps, string>;
