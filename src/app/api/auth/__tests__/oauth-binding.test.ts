@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { generateKeyPairSync, sign } from "node:crypto";
 const mocks = vi.hoisted(() => ({ rows: [] as unknown[][], insert: vi.fn() }));
-vi.mock("@/lib/db", () => ({ db: { transaction: async (work: Function) => work({
+vi.mock("@/lib/db", () => ({ db: { transaction: async (work: (tx: unknown) => unknown) => work({
   select: () => ({ from: () => ({ where: () => ({ limit: async () => mocks.rows.shift() || [] }) }) }),
   insert: () => ({ values: mocks.insert }),
 }) } }));
