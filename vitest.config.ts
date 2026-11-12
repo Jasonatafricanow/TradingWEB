@@ -14,6 +14,7 @@ export default defineConfig({
       "src/services/inventory/__tests__/**/*.test.ts",
       "src/app/api/admin/pos/__tests__/**/*.test.ts",
       "src/app/api/auth/__tests__/**/*.test.ts",
+      "src/lib/__tests__/version.test.ts",
       "scripts/**/*.test.ts",
     ],
   },

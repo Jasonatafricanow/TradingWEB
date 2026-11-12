@@ -142,3 +142,5 @@ source-html/
 .openclaw/
 .superpowers/
 .mimosa/
+
+!scripts/write-build-info.mjs

@@ -3,7 +3,9 @@ module.exports = {
     name: 'tradingweb',
     script: 'pnpm',
     args: 'next start',
-    cwd: '/opt/tradingweb',
+    // 热部署（版本更新模块）：release.sh 通过 TRADINGWEB_CWD 指向 current 软链；
+    // 未设置时保持传统单目录部署路径。
+    cwd: process.env.TRADINGWEB_CWD || '/opt/tradingweb',
     env: {
       NODE_ENV: 'production',
       PORT: 3000,

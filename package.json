@@ -17,6 +17,7 @@
         "test:migration-reconciliation:integration": "tsx scripts/migration-reconciliation/integration/run.ts",
         "test:migration-reconciliation:replay-full": "tsx scripts/migration-reconciliation/integration/run.ts replay-full",
         "ts-check": "tsc -p tsconfig.json",
+        "version:info": "node scripts/write-build-info.mjs",
         "test": "vitest run",
         "i18n:check": "tsx scripts/i18n-hardcoded.ts",
         "validate": "pnpm run --parallel '/^(ts-check|lint:build|i18n:check)$/'"

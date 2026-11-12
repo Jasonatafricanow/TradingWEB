@@ -1,5 +1,9 @@
 ﻿# tradingWEB 生产部署 Checklist
 
+> **推荐：不停机热部署（版本更新模块）** — 见下方「不停机热部署」章节。
+> 传统 `pm2 stop` + 覆盖 `.next` 的流程会有停机窗口，且新旧产物混用易触发
+> Server Action 错误；热部署用 release 目录 + current 软链原子切换解决这两个问题。
+
 ## 前置：本地构建
 
 > ⚠️ **绝对不要在服务器上运行 `next build`。** 服务器内存仅 1.6GB，`next build` 会 OOM 打崩整个机器。
@@ -27,6 +31,94 @@ rsync -avz --delete \
 # 服务器启动
 pm2 start pnpm --name tradingweb -- next start
 ```
+
+---
+
+## 不停机热部署（版本更新模块）
+
+### 目录结构
+
+```
+/opt/tradingweb/
+├── releases/
+│   ├── <buildId-A>/          # 每次发布的完整产物（源码 + .next + node_modules）
+│   └── <buildId-B>/
+├── current -> releases/<buildId-B>   # 软链，PM2 cwd 指向这里
+├── shared/
+│   └── .env                  # 生产环境变量，各 release 软链共享
+└── logs/
+```
+
+### 一次性初始化（从传统单目录迁移）
+
+```bash
+ssh root@<server>
+cd /opt/tradingweb
+
+# 1) 把现有运行目录整体挪进 releases（保留 node_modules 与 .next）
+mkdir -p releases shared logs
+FIRST_RELEASE="legacy-$(date +%Y%m%d)"
+mkdir -p "releases/$FIRST_RELEASE"
+# 将现有文件移入（.git、logs、releases、shared 除外；按实际目录调整）
+for item in .next node_modules src public package.json pnpm-lock.yaml \
+            next.config.mjs ecosystem.config.js scripts drizzle; do
+  [ -e "$item" ] && mv "$item" "releases/$FIRST_RELEASE/"
+done
+cp .env "shared/.env"          # 环境变量集中到 shared
+ln -sfn "releases/$FIRST_RELEASE" current
+
+# 2) 让 PM2 指向 current（ecosystem.config.js 已支持 TRADINGWEB_CWD）
+pm2 delete tradingweb
+TRADINGWEB_CWD=/opt/tradingweb/current pm2 start current/ecosystem.config.js --update-env
+pm2 save
+```
+
+> 初始化这步需要一次短暂重启；之后的每次发布都不再停机。
+
+### 日常发布（本地一条命令）
+
+```bash
+# 本地（需要 rsync/ssh；构建永远在本地，服务器内存不足以 build）
+bash scripts/deploy-release.sh root@<server>
+```
+
+脚本会：本地 `pnpm build`（自动生成 `.next/build-info.json`）→ 组装产物 →
+rsync 到 `releases/<buildId>/` → 远程执行 `scripts/release.sh <buildId>`。
+
+服务器端 `release.sh` 的动作：
+
+1. 校验产物完整性，软链 `shared/.env`；
+2. lockfile 未变 → 硬链接继承上一版 `node_modules`（秒级、不占磁盘）；
+   有变化 → 加 `--install-deps` 全新安装；
+3. 在独立端口（默认 3100）预启动新构建并健康检查 `/api/version`，
+   **失败则直接中止，线上不受影响**；
+4. 原子切换 `current` 软链 → `pm2 startOrReload`（优雅重载，旧进程处理完
+   存量请求后退出）；
+5. 复检线上 `/api/version`；失败自动把软链切回上一版并重载（回滚）；
+6. 默认保留最近 5 个 release（`--keep N` 可调）。
+
+手动在服务器执行也可以：
+
+```bash
+bash /opt/tradingweb/releases/<buildId>/scripts/release.sh <buildId> [--keep 5] [--install-deps]
+```
+
+### 版本可见性
+
+- `GET /api/version`：公开探针（appVersion / buildId / builtAt，no-store），
+  供部署健康检查与客户端轮询；
+- 后台「系统治理 → 版本与更新」（`/admin/version`）：构建详情、git 提交、
+  运行时长（admin / operator 可见）；
+- 前台所有页面每 60 秒轮询一次探针，发现新 buildId 弹非阻断提示
+  「发现新版本 → 立即刷新 / 稍后」，不自动刷新，避免打断下单与收银。
+
+### 注意事项
+
+- 依赖升级（pnpm-lock.yaml 变化）必须 `--install-deps`；硬链接继承只适用于
+  lockfile 完全一致的情况。
+- Nginx 建议保留 `proxy_next_upstream` 默认重试；优雅重载窗口内的个别请求
+  由重试兜底。HTML/RSC 响应不要进长期共享缓存（见附录）。
+- 数据库迁移与热部署解耦：先执行向后兼容的 migration，再发布代码。
 
 ---
 

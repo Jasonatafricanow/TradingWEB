@@ -35,6 +35,7 @@ export const SYSTEM_SHELL_KEYS = {
   staff: "nav.staff",
   "audit-logs": "nav.audit_logs",
   settings: "nav.settings",
+  version: "nav.version",
   sales: "nav.sales",
   traffic: "nav.traffic",
   briefing: "nav.briefing",

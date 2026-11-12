@@ -10,6 +10,7 @@ import { Navbar } from "@/components/navbar";
 import { Footer } from "@/components/footer";
 import { Toaster } from "@/components/ui/sonner";
 import { ErrorBoundary } from "@/components/error-boundary";
+import { VersionUpdateNotifier } from "@/components/version-update-notifier";
 import { PortalContainerInit } from "@/lib/portal-utils";
 
 /** 页面访问埋点 */
@@ -202,6 +203,7 @@ export function ClientProviders({ children, activeTheme }: { children: React.Rea
           <ThemeProvider theme={activeTheme}>
             <PageViewTracker />
             <AuthenticatedFetchBridge />
+            <VersionUpdateNotifier />
             <AppShell>
               {children}
             </AppShell>

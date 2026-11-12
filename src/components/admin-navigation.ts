@@ -10,6 +10,7 @@ import {
   Database,
   Envelope,
   Gear,
+  GitBranch,
   Image,
   Lightbulb,
   LinkSimple,
@@ -128,6 +129,7 @@ export const ADMIN_NAV_GROUPS = [
       { id: "staff", labelKey: "nav.staff", href: "/admin/staff", icon: Users },
       { id: "audit-logs", labelKey: "nav.audit_logs", href: "/admin/audit-logs", icon: ClipboardText },
       { id: "settings", labelKey: "nav.settings", href: "/admin/settings", icon: Gear },
+      { id: "version", labelKey: "nav.version", href: "/admin/version", icon: GitBranch },
     ],
   },
 ] as const satisfies readonly AdminNavigationGroup[];
@@ -139,7 +141,7 @@ const ROLE_MENUS: Record<string, readonly string[]> = {
     "abandoned-carts", "memberships", "affiliates", "audit-logs", "warehouses",
     "stores", "shipments", "shipping-templates", "customers", "reviews",
     "recommendations", "media", "seed", "briefing", "inventory", "staff",
-    "settings", "imports", "redirects", "payment-methods",
+    "settings", "imports", "redirects", "payment-methods", "version",
   ],
   operator: [
     "dashboard", "products", "orders", "pos", "categories", "sales", "traffic",
