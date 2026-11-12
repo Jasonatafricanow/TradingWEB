@@ -1,5 +1,6 @@
 "use client"
 
+import { apiFetch } from "@/lib/client-api"
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/contexts/auth-context"
@@ -54,11 +55,12 @@ async function finishOAuthLogin(
   credential: string,
   setSession: (token: string, user: UserInfo) => void,
   onSuccess: (user: UserInfo) => void,
+  link = false,
 ): Promise<void> {
-  const res = await fetch("/api/auth/oauth/google", {
+  const res = await apiFetch("/api/auth/oauth/google", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ credential }),
+    body: JSON.stringify({ credential, link }),
   })
   const json = await res.json()
   if (json.error) throw new Error(json.error)
@@ -67,7 +69,7 @@ async function finishOAuthLogin(
   onSuccess(json.data.user)
 }
 
-export function GoogleLoginButton({ onSuccess }: { onSuccess: (user: UserInfo) => void }) {
+export function GoogleLoginButton({ onSuccess, link = false }: { onSuccess: (user: UserInfo) => void; link?: boolean }) {
   const [loading, setLoading] = useState(false)
   const { setSession } = useAuth()
   const { t } = useI18n()
@@ -91,10 +93,10 @@ export function GoogleLoginButton({ onSuccess }: { onSuccess: (user: UserInfo) =
         callback: async (response) => {
           try {
             if (!response.credential) throw new Error("Missing Google credential")
-            await finishOAuthLogin(response.credential, setSession, onSuccess)
+            await finishOAuthLogin(response.credential, setSession, onSuccess, link)
           } catch (err) {
             console.error("Google login failed:", err)
-            toast.error(t("auth.oauth.google_failed"))
+            toast.error(err instanceof Error ? err.message : t("auth.oauth.google_failed"))
           } finally {
             setLoading(false)
           }
@@ -110,7 +112,7 @@ export function GoogleLoginButton({ onSuccess }: { onSuccess: (user: UserInfo) =
       })
     } catch (err) {
       console.error("Google init failed:", err)
-      toast.error(t("auth.oauth.google_failed"))
+      toast.error(err instanceof Error ? err.message : t("auth.oauth.google_failed"))
       setLoading(false)
     }
   }
@@ -133,7 +135,7 @@ export function GoogleLoginButton({ onSuccess }: { onSuccess: (user: UserInfo) =
   )
 }
 
-export function AppleLoginButton({ onSuccess }: { onSuccess: (user: UserInfo) => void }) {
+export function AppleLoginButton({ onSuccess, link = false }: { onSuccess: (user: UserInfo) => void; link?: boolean }) {
   const [loading, setLoading] = useState(false)
   const { setSession } = useAuth()
   const { t } = useI18n()
@@ -158,10 +160,11 @@ export function AppleLoginButton({ onSuccess }: { onSuccess: (user: UserInfo) =>
         usePopup: true,
       })
 
-      const res = await fetch("/api/auth/oauth/apple", {
+      const res = await apiFetch("/api/auth/oauth/apple", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          link,
           authorizationCode: response.authorization.code,
           redirectUri,
           user: response.user,
@@ -174,7 +177,7 @@ export function AppleLoginButton({ onSuccess }: { onSuccess: (user: UserInfo) =>
       onSuccess(json.data.user)
     } catch (err) {
       console.error("Apple login failed:", err)
-      toast.error(t("auth.oauth.apple_failed"))
+      toast.error(err instanceof Error ? err.message : t("auth.oauth.apple_failed"))
     } finally {
       setLoading(false)
     }

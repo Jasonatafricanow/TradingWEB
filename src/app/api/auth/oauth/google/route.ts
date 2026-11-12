@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import { verifyGoogleToken, findOrCreateUser } from "@/lib/oauth"
-import { signSessionToken } from "@/services/auth/auth-service"
+import { getUserFromToken, signSessionToken } from "@/services/auth/auth-service"
 
 export async function POST(request: NextRequest) {
   try {
-    const { credential } = await request.json()
+    const { credential, link } = await request.json()
     if (!credential) {
       return NextResponse.json({ error: "Missing credential" }, { status: 400 })
     }
@@ -12,8 +12,15 @@ export async function POST(request: NextRequest) {
     // Verify Google ID token
     const googleUser = await verifyGoogleToken(credential)
     
+    let linkUserId: string | undefined;
+    if (link === true) {
+      const bearer = request.headers.get("authorization")?.match(/^Bearer (.+)$/i)?.[1];
+      const user = bearer ? await getUserFromToken(bearer) : null;
+      if (!user) return NextResponse.json({ error: "Sign in before linking" }, { status: 401 });
+      linkUserId = user.id;
+    }
     // Find or create user in our database
-    const result = await findOrCreateUser(googleUser.email, googleUser.name)
+    const result = await findOrCreateUser(googleUser.email, googleUser.name, { provider: "google", subject: googleUser.googleId }, linkUserId)
     
     // Issue our JWT
     const token = signSessionToken(result, result.passwordHash)

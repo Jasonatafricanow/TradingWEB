@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import { verifyAppleAuthorizationCode, findOrCreateUser } from "@/lib/oauth"
-import { signSessionToken } from "@/services/auth/auth-service"
+import { getUserFromToken, signSessionToken } from "@/services/auth/auth-service"
 
 export async function POST(request: NextRequest) {
   try {
-    const { authorizationCode, redirectUri, user: userInfo } = await request.json()
+    const { authorizationCode, redirectUri, user: userInfo, link } = await request.json()
     
     if (!authorizationCode) {
       return NextResponse.json({ error: "Missing authorization code" }, { status: 400 })
@@ -16,8 +16,15 @@ export async function POST(request: NextRequest) {
     // Verify with Apple's server
     const appleUser = await verifyAppleAuthorizationCode(authorizationCode, redirectUri || process.env.APPLE_REDIRECT_URI || "")
     
+    let linkUserId: string | undefined;
+    if (link === true) {
+      const bearer = request.headers.get("authorization")?.match(/^Bearer (.+)$/i)?.[1];
+      const user = bearer ? await getUserFromToken(bearer) : null;
+      if (!user) return NextResponse.json({ error: "Sign in before linking" }, { status: 401 });
+      linkUserId = user.id;
+    }
     // Find or create user
-    const result = await findOrCreateUser(appleUser.email, name)
+    const result = await findOrCreateUser(appleUser.email, name, { provider: "apple", subject: appleUser.appleId }, linkUserId)
 
     // Issue our JWT
     const token = signSessionToken(result, result.passwordHash)
