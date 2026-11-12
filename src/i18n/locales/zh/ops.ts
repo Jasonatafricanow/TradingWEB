@@ -47,5 +47,7 @@ export const zhOps = {
   "checkout_result.title_pending": "等待支付",
   "checkout_result.title_unknown": "请查看订单状态",
   "checkout_result.body_paid": "您的付款已确认。",
+  "admin.import.warnings_title": "警告：",
+  "admin.import.row_warning": "第 {row} 行：{warning}",
   "checkout_result.body_other": "请到我的订单查看最新的支付和履约状态。",
 } as const satisfies Record<keyof typeof enOps, string>;

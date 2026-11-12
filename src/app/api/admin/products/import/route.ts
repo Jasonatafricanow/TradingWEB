@@ -4,6 +4,13 @@ import { db } from "@/lib/db";
 import { products, productVariants, categories } from "@/storage/database/shared/schema";
 import { randomUUID } from "node:crypto";
 import { normalizeProductPayload } from "@/services/admin/product-payload";
+import { listProductTypes } from "@/services/admin/product-type-service";
+import { eq } from "drizzle-orm";
+import { IMPORT_MESSAGES } from "@/lib/api-messages";
+
+const PRODUCT_STATUSES = new Set(["active", "inactive"]);
+// Plain decimal only: "1.234,56" would otherwise parse as 1.234 and silently misprice.
+const DECIMAL_PATTERN = /^\d+(\.\d{1,4})?$/;
 
 interface ImportProduct {
   title: string;
@@ -161,9 +168,14 @@ export async function POST(request: NextRequest) {
       if (cat.name_en) categoryMap.set(cat.name_en.toLowerCase(), cat.id);
     }
 
+    const { data: typeRows } = await listProductTypes({ active: true });
+    const allowedTypes = new Set(typeRows.map((type) => type.code));
+    const seenBarcodes = new Set<string>();
+
     let imported = 0;
     let failed = 0;
     const errors: { row: number; error: string }[] = [];
+    const warnings: { row: number; warning: string }[] = [];
 
     for (let i = 0; i < importProducts.length; i++) {
       const rawRow = importProducts[i] as unknown as Record<string, unknown>;
@@ -205,7 +217,7 @@ export async function POST(request: NextRequest) {
           continue;
         }
         const parsedPrice = parseFloat(String(row.price));
-        if (!Number.isFinite(parsedPrice)) {
+        if (!DECIMAL_PATTERN.test(String(row.price).trim()) || !Number.isFinite(parsedPrice)) {
           errors.push({ row: i + 1, error: "Price must be a valid number" });
           failed++;
           continue;
@@ -223,16 +235,40 @@ export async function POST(request: NextRequest) {
           continue;
         }
 
+        if (row.type && !allowedTypes.has(row.type)) {
+          errors.push({ row: i + 1, error: IMPORT_MESSAGES.unknownProductType(row.type) });
+          failed++;
+          continue;
+        }
+        if (row.status && !PRODUCT_STATUSES.has(row.status)) {
+          errors.push({ row: i + 1, error: IMPORT_MESSAGES.invalidProductStatus(row.status) });
+          failed++;
+          continue;
+        }
+        // Barcode is the re-import identity: a retried or repeated file must not duplicate products.
+        const barcode = row.barcode?.trim();
+        if (barcode) {
+          const [existing] = await db.select({ id: products.id }).from(products).where(eq(products.barcode, barcode)).limit(1);
+          if (existing || seenBarcodes.has(barcode)) {
+            errors.push({ row: i + 1, error: IMPORT_MESSAGES.duplicateBarcode(barcode) });
+            failed++;
+            continue;
+          }
+          seenBarcodes.add(barcode);
+        }
+
         const productId = randomUUID();
         const variantItems = row.variants && row.variants.trim()
           ? parseVariants(row.variants, parsedPrice)
           : [];
         if (variantItems.some((variant) => stockOrZero(variant.stock) !== 0)) {
-          throw new Error("Variant stock requires a location-aware inventory import");
+          // Exported files carry stock; it is not imported here (stock is location-aware).
+          warnings.push({ row: i + 1, warning: IMPORT_MESSAGES.variantStockIgnored });
         }
 
-        // Insert product
-        await db.insert(products).values(normalizeProductPayload({
+        // Product and variants commit together so a bad variant cannot leave a half-imported product.
+        await db.transaction(async (tx) => {
+        await tx.insert(products).values(normalizeProductPayload({
           id: productId,
           title: row.title.trim(),
           title_en: row.title_en?.trim() || null,
@@ -266,7 +302,7 @@ export async function POST(request: NextRequest) {
           const explicitDefaultIndex = variantItems.findIndex((v) => boolValue(v.is_default));
           for (let j = 0; j < variantItems.length; j++) {
             const variant = variantItems[j];
-            await db.insert(productVariants).values({
+            await tx.insert(productVariants).values({
               id: randomUUID(),
               product_id: productId,
               title: variant.title || null,
@@ -286,6 +322,7 @@ export async function POST(request: NextRequest) {
             } as typeof productVariants.$inferInsert);
           }
         }
+        });
 
         imported++;
       } catch (err) {
@@ -300,6 +337,7 @@ export async function POST(request: NextRequest) {
       failed,
       total: importProducts.length,
       errors: errors.length > 0 ? errors : undefined,
+      warnings: warnings.length > 0 ? warnings : undefined,
     });
   } catch (err) {
     return errorResponse(err);

@@ -45,5 +45,7 @@ export const enOps = {
   "checkout_result.title_pending": "Awaiting payment",
   "checkout_result.title_unknown": "Check your order status",
   "checkout_result.body_paid": "Your payment has been confirmed.",
+  "admin.import.warnings_title": "Warnings:",
+  "admin.import.row_warning": "Row {row}: {warning}",
   "checkout_result.body_other": "Open your orders to review the latest payment and fulfillment status.",
 } as const;

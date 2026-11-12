@@ -47,5 +47,7 @@ export const ptOps = {
   "checkout_result.title_pending": "Aguardando pagamento",
   "checkout_result.title_unknown": "Verifique o status do pedido",
   "checkout_result.body_paid": "Seu pagamento foi confirmado.",
+  "admin.import.warnings_title": "Avisos:",
+  "admin.import.row_warning": "Linha {row}: {warning}",
   "checkout_result.body_other": "Abra seus pedidos para ver o status mais recente de pagamento e entrega.",
 } as const satisfies Record<keyof typeof enOps, string>;
