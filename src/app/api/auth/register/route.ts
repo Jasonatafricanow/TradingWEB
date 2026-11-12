@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { hashPassword, signToken } from "@/lib/auth-local"
+import { hashPasswordAsync as hashPassword, signToken } from "@/lib/auth-local"
 import { signSessionToken } from "@/services/auth/auth-service"
 import { randomUUID } from "node:crypto"
 import { IS_DEMO_MODE } from "@/config/constants"
@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
     }
 
     const id = randomUUID()
-    const passwordHash = hashPassword(password)
+    const passwordHash = await hashPassword(password)
     await db.$client.execute(
       'INSERT INTO users (id, email, name, password_hash) VALUES (?, ?, ?, ?)',
       [id, email, name || null, passwordHash]

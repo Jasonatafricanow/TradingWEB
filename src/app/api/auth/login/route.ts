@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { hashPassword, verifyPassword, signToken } from "@/lib/auth-local"
+import { hashPasswordAsync as hashPassword, verifyPasswordAsync as verifyPassword, signToken } from "@/lib/auth-local"
 import { signSessionToken } from "@/services/auth/auth-service"
 import { checkRateLimit, getClientIp, RATE_LIMITS } from "@/lib/rate-limit"
 import { IS_DEMO_MODE } from "@/config/constants"
@@ -76,12 +76,12 @@ export async function POST(request: NextRequest) {
     const user = users[0]
     if (!user) {
       // Keep the missing-user path computationally close to a bad-password path.
-      verifyPassword(password, DUMMY_PASSWORD_HASH)
+      await verifyPassword(password, await DUMMY_PASSWORD_HASH)
       return NextResponse.json({ error: AUTH_API_MESSAGES.invalidCredentials }, { status: 401 })
     }
 
-    const passwordHash = user.password_hash || DUMMY_PASSWORD_HASH
-    const passwordOk = verifyPassword(password, passwordHash)
+    const passwordHash = user.password_hash || await DUMMY_PASSWORD_HASH
+    const passwordOk = await verifyPassword(password, passwordHash)
     if (!user.is_active || !user.password_hash || !passwordOk) {
       return NextResponse.json({ error: AUTH_API_MESSAGES.invalidCredentials }, { status: 401 })
     }

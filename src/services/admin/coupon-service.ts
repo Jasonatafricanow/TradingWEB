@@ -1,7 +1,7 @@
 ﻿import { db } from '@/lib/db';
 import { and, desc, eq, like, or, sql } from 'drizzle-orm';
 import { coupons } from '@/storage/database/shared/schema';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, randomBytes } from 'node:crypto';
 import type { DbTx } from '@/services/orders/order-pricing-service';
 
 export interface Coupon {
@@ -299,7 +299,7 @@ export async function getCouponCampaignStats(): Promise<CouponCampaignStats[]> {
 }
 
 function generateBatchCode(prefix: string, index: number): string {
-  const suffix = Math.random().toString(36).substring(2, 6).toUpperCase();
+  const suffix = randomBytes(8).toString("hex").toUpperCase();
   return `${prefix}-${String(index + 1).padStart(3, "0")}-${suffix}`;
 }
 

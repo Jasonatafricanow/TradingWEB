@@ -1,3 +1,4 @@
+import { createHash, randomUUID } from "node:crypto";
 /**
  * 本地认证服务 — 使用 JWT + 数据库
  */
@@ -98,6 +99,9 @@ export async function getUserFromToken(token: string): Promise<AuthenticatedUser
   // ═══════ PRODUCTION MODE ═══════
   const { db } = await import("@/lib/db")
 
+  const [revoked] = await db.$client.execute("SELECT token_hash FROM revoked_sessions WHERE token_hash = ? AND expires_at > CURRENT_TIMESTAMP LIMIT 1", [createHash("sha256").update(token).digest("hex")]);
+  if ((revoked as unknown[]).length > 0) return null;
+
   const repository: AuthRepository = {
     async findUserById(userId) {
       const [rows] = await db.$client.execute(
@@ -126,7 +130,16 @@ export async function getUserFromToken(token: string): Promise<AuthenticatedUser
 
 /** Issue a session token bound to the user's current credential version. */
 export function signSessionToken(user: { id: string; email: string }, passwordHash: string | null): string {
-  return signToken({ sub: user.id, email: user.email, pwdv: passwordResetVersion(passwordHash) })
+  return signToken({ sub: user.id, email: user.email, jti: randomUUID(), pwdv: passwordResetVersion(passwordHash) })
 }
 
 export { signToken, verifyToken } from "@/lib/auth-local"
+
+/** Revoke exactly this session; password changes separately revoke all credential versions. */
+export async function revokeSession(token: string): Promise<void> {
+  const payload = verifyToken(token);
+  if (!payload || payload.role === "password_reset" || IS_DEMO_MODE) return;
+  const { db } = await import("@/lib/db");
+  await db.$client.execute("INSERT IGNORE INTO revoked_sessions (token_hash, expires_at) VALUES (?, ?)", [createHash("sha256").update(token).digest("hex"), new Date(payload.exp * 1000)]);
+  await db.$client.execute("DELETE FROM revoked_sessions WHERE expires_at <= CURRENT_TIMESTAMP LIMIT 1000");
+}

@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
+import { toast } from "sonner";
 import { isSessionRejected } from "@/lib/session-check";
 
 interface LocalUser {
@@ -115,6 +116,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const signOut = useCallback(async () => {
+    const token = getStoredToken();
+    if (token) {
+      try {
+        const response = await fetch("/api/auth/logout", { method: "POST", headers: { Authorization: `Bearer ${token}` } });
+        if (!response.ok) throw new Error("logout rejected");
+      } catch {
+        toast.error("Sign out failed. Please retry.");
+        return;
+      }
+    }
     clearStoredToken()
     setUser(null)
   }, [])

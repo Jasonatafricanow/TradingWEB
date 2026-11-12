@@ -6,7 +6,7 @@
  * - HMAC-SHA256 JWT 签名
  */
 
-import { randomBytes, createHmac, pbkdf2Sync, timingSafeEqual } from 'node:crypto'
+import { randomBytes, createHmac, pbkdf2Sync, pbkdf2, timingSafeEqual } from 'node:crypto'
 
 // ==================== JWT ====================
 
@@ -14,7 +14,7 @@ export const DEFAULT_JWT_SECRET = 'dev-jwt-secret-do-not-use-in-production'
 
 export function resolveJwtSecret(env: { NODE_ENV?: string; JWT_SECRET?: string } = process.env): string {
   const secret = env.JWT_SECRET?.trim()
-  if (env.NODE_ENV === 'production' && (!secret || secret === DEFAULT_JWT_SECRET)) {
+  if (env.NODE_ENV === 'production' && (!secret || secret === DEFAULT_JWT_SECRET || Buffer.byteLength(secret) < 32)) {
     throw new Error('JWT_SECRET must be configured to a strong non-default value in production')
   }
   return secret || DEFAULT_JWT_SECRET
@@ -59,6 +59,7 @@ export interface JwtPayload {
   sub: string       // user_id
   email: string
   role?: string
+  jti?: string     // unique session identifier
   pwdv?: string     // password-reset credential version
   iat: number       // issued at
   exp: number       // expires at
@@ -103,7 +104,7 @@ export function verifyToken(token: string): JwtPayload | null {
     const payload = JSON.parse(base64UrlDecode(body)) as JwtPayload
 
     // Check expiry
-    if (payload.exp < Math.floor(Date.now() / 1000)) {
+    if (!payload || !Number.isFinite(payload.exp) || !Number.isInteger(payload.exp) || payload.exp <= Math.floor(Date.now() / 1000)) {
       return null
     }
 
@@ -149,4 +150,20 @@ export function passwordResetVersion(passwordHash: string | null): string {
   return createHmac("sha256", jwtSecret())
     .update(passwordHash ?? "<unset-password>")
     .digest("hex")
+}
+
+function derivePassword(password: string, salt: string): Promise<Buffer> {
+  return new Promise((resolve, reject) => pbkdf2(password, salt, HASH_ITERATIONS, HASH_KEYLEN, HASH_DIGEST,
+    (error, value) => error ? reject(error) : resolve(value)));
+}
+
+export async function hashPasswordAsync(password: string): Promise<string> {
+  const salt = randomBytes(SALT_LENGTH).toString('hex');
+  return `${salt}:${(await derivePassword(password, salt)).toString('hex')}`;
+}
+
+export async function verifyPasswordAsync(password: string, stored: string): Promise<boolean> {
+  const [salt, hash] = stored.split(':');
+  if (!salt || !hash) return false;
+  return safeTimingEqualString((await derivePassword(password, salt)).toString('hex'), hash);
 }
