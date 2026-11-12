@@ -56,4 +56,5 @@ export const zhOps = {
   "account.member_discount_not_applied": "等级折扣 {percent}% 暂未在结账时生效",
   "account.wallet_not_at_checkout": "钱包余额暂时不能用于结账。",
   "affiliate.commission_not_live": "佣金结算尚未上线：通过推广链接产生的订单暂不计入佣金，收益和余额不会增加。",
+  "product.choose_options_first": "请先选择该商品的规格和配送方式",
 } as const satisfies Record<keyof typeof enOps, string>;

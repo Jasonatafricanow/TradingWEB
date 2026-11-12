@@ -54,4 +54,5 @@ export const enOps = {
   "account.member_discount_not_applied": "Tier discount {percent}% is not applied at checkout yet",
   "account.wallet_not_at_checkout": "Wallet balance cannot be used at checkout yet.",
   "affiliate.commission_not_live": "Commission tracking is not live yet: orders from your link are not credited, so earnings and balance do not grow.",
+  "product.choose_options_first": "Choose the options for this product first",
 } as const;

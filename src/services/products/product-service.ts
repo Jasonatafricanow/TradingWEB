@@ -147,13 +147,15 @@ export async function listActiveProducts(options?: { type?: string; category?: s
     `SELECT p.*, c.name as category_name, c.name_en as category_name_en,
             c.name_es as category_name_es, c.name_ja as category_name_ja,
             COALESCE(pv.min_price, p.price) as price_min,
-            COALESCE(pv.max_price, p.price) as price_max
+            COALESCE(pv.max_price, p.price) as price_max,
+            COALESCE(pv.variant_count, 0) as variant_count
      FROM products p
      LEFT JOIN categories c ON p.category_id = c.id
      LEFT JOIN (
        SELECT product_id,
          MIN(price) as min_price,
-         MAX(price) as max_price
+         MAX(price) as max_price,
+         COUNT(*) as variant_count
        FROM product_variants
        GROUP BY product_id
      ) pv ON p.id = pv.product_id

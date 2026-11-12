@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, Suspense } from "react";
+import { parseDeliveryMethods } from "@/config/delivery-methods";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useI18n } from "@/contexts/i18n-context";
 import { useCart } from "@/contexts/cart-context";
@@ -62,6 +63,7 @@ interface Product {
   status: string;
   image_key: string | null;
   categories: CategoryInfo | null;
+  variant_count?: number | string;
 }
 
 // ─── Design config ────────────────────────────────────────────────────────────
@@ -310,6 +312,7 @@ function ProductSkeleton() {
 
 function ProductsContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const { t, locale } = useI18n();
   const { addItem } = useCart();
   const { format: formatPrice } = useCurrency();
@@ -399,11 +402,21 @@ function ProductsContent() {
   }
 
   function handleAddToCart(product: Product) {
+    // TW-13: the list cannot pick a variant or one of several delivery methods,
+    // and checkout rejects the line without them; send the shopper to choose.
+    const deliveryMethods = parseDeliveryMethods(product.delivery_method);
+    if (Number(product.variant_count || 0) > 0 || deliveryMethods.length > 1) {
+      toast.info(t("product.choose_options_first"));
+      router.push(`/products/${product.id}`);
+      return;
+    }
     addItem({
       id: product.id,
       title: getLocalizedField(product, "title"),
       price: parseFloat(product.price),
       type: product.type,
+      variant_id: null,
+      delivery_method: deliveryMethods[0] ?? null,
     });
     toast.success(t("product.add_to_cart_success"));
   }
