@@ -59,7 +59,7 @@ export function MemberAssignCard({ tiers }: { tiers: Array<{ id: string; name: s
       <CardContent className="space-y-3">
         <div className="flex gap-2">
           <Input value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => e.key === "Enter" && lookup()} placeholder={t("wallets.search_placeholder")} className="max-w-sm" />
-          <Button variant="outline" onClick={lookup}>{t("common.search")}</Button>
+          <Button variant="outline" onClick={lookup}>{t("wallets.search")}</Button>
         </div>
         {current && (
           <div className="space-y-3">

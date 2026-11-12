@@ -76,7 +76,7 @@ export default function AdminWalletsPage() {
       <p className="text-sm text-muted-foreground">{t("wallets.intro")}</p>
       <div className="flex gap-2">
         <Input value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => e.key === "Enter" && lookup()} placeholder={t("wallets.search_placeholder")} className="max-w-sm" />
-        <Button variant="outline" onClick={() => lookup()}><MagnifyingGlass className="h-4 w-4 mr-1" /> {t("common.search")}</Button>
+        <Button variant="outline" onClick={() => lookup()}><MagnifyingGlass className="h-4 w-4 mr-1" /> {t("wallets.search")}</Button>
       </div>
 
       {summary && (

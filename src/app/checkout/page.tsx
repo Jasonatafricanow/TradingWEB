@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { checkoutIdempotencyKey } from "@/lib/checkout-attempt";
 import { combineDiscounts, walletShareCents } from "@/services/promotions/money-rules";
 import { readAffiliateRef } from "@/lib/affiliate-ref";
@@ -154,9 +154,13 @@ export default function CheckoutPage() {
     }
   }, [user]);
 
+  // Set once an order is placed: the cart empties on purpose and the page is
+  // already navigating to the result page, so the empty-cart redirect must not win.
+  const orderPlacedRef = useRef(false);
+
   // Redirect to products if cart is empty
   useEffect(() => {
-    if (items.length === 0 && !loading) {
+    if (items.length === 0 && !loading && !orderPlacedRef.current) {
       router.replace("/products");
     }
   }, [items.length, loading, router]);
@@ -237,6 +241,7 @@ export default function CheckoutPage() {
 
       // Fully paid from the wallet: nothing left to collect.
       if ((orderJson.payment_status || orderJson.data?.payment_status) === "paid") {
+        orderPlacedRef.current = true;
         clearCart();
         router.push(`/checkout/success?order_id=${orderId}`);
         return;
@@ -244,6 +249,7 @@ export default function CheckoutPage() {
 
       // 线下支付：不调 /api/payment/create，直接跳成功页
       if (provider !== "paypal" && provider !== "stripe") {
+        orderPlacedRef.current = true;
         clearCart();
         router.push(`/checkout/success?manual=1&order_id=${orderId}`);
         return;
@@ -260,10 +266,12 @@ export default function CheckoutPage() {
       const json = await res.json();
 
       if (json.data?.approvalUrl) {
+        orderPlacedRef.current = true;
         clearCart();
         window.location.href = json.data.approvalUrl;
       } else if (json.data?.message?.includes("Mock")) {
         // Mock mode fallback
+        orderPlacedRef.current = true;
         clearCart();
         router.push(`/checkout/success?mock=1`);
       } else {

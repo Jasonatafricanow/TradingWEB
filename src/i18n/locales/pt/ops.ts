@@ -156,4 +156,5 @@ export const ptOps = {
   "affiliates.commission_saved": "Definições de comissão guardadas",
   "affiliates.commission_save_failed": "Falha ao guardar definições de comissão",
   "memberships.tier_option": "Nv.{level} {name}",
+  "wallets.search": "Pesquisar",
 } as const satisfies Record<keyof typeof enOps, string>;

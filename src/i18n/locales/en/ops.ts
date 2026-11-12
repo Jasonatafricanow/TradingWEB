@@ -154,4 +154,5 @@ export const enOps = {
   "affiliates.commission_saved": "Commission settings saved",
   "affiliates.commission_save_failed": "Failed to save commission settings",
   "memberships.tier_option": "Lv.{level} {name}",
+  "wallets.search": "Search",
 } as const;

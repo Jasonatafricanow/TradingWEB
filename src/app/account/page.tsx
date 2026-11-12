@@ -347,7 +347,7 @@ export default function AccountPage() {
                   <div className="text-sm text-muted-foreground">{locale === "zh" ? "当前等级" : "Current Tier"}</div>
                   <div className="text-xl font-bold flex items-center gap-2 mt-1">
                     <Crown className="h-5 w-5" style={{ color: membership.tier?.badge_color || "#999" }} />
-                    {membership.tier?.name || (locale === "zh" ? "普通会员" : "Member")}
+                    {memberDiscount?.tier_name || membership.tier?.name || (locale === "zh" ? "普通会员" : "Member")}
                   </div>
                   {/* The discount checkout applies right now (program switch, tier, validity window). */}
                   {memberDiscount?.enabled && memberDiscount.percent > 0 ? (

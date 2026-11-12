@@ -12,7 +12,7 @@ import { API_MESSAGES } from "@/lib/api-messages";
  * Unsigned webhooks are only for local callback debugging. Public staging and
  * production environments must use provider signatures.
  */
-export function allowUnsignedWebhookDebug(requestUrl: string): boolean {
+function allowUnsignedWebhookDebug(requestUrl: string): boolean {
   if (process.env.ALLOW_UNSIGNED_WEBHOOKS !== "true") return false;
 
   try {

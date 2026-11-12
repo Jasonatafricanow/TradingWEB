@@ -156,4 +156,5 @@ export const zhOps = {
   "affiliates.commission_saved": "佣金设置已保存",
   "affiliates.commission_save_failed": "保存佣金设置失败",
   "memberships.tier_option": "Lv.{level} {name}",
+  "wallets.search": "搜索",
 } as const satisfies Record<keyof typeof enOps, string>;
