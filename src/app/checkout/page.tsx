@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
+import { checkoutIdempotencyKey } from "@/lib/checkout-attempt";
 import { useRouter } from "next/navigation";
 import { useCart } from "@/contexts/cart-context";
 import { useAuth } from "@/contexts/auth-context";
@@ -60,7 +61,6 @@ export default function CheckoutPage() {
 
   // ── Maputo Delivery ──
   interface CheckoutZone { id: string; name: string; name_en: string | null; base_rate: string; free_shipping_min: string | null; time_slots: unknown; }
-  const checkoutAttempt = useRef({ signature: "", key: "" });
   const [deliveryZones, setDeliveryZones] = useState<CheckoutZone[]>([]);
   const [selectedZone, setSelectedZone] = useState("");
   const [deliveryDate, setDeliveryDate] = useState("");
@@ -183,9 +183,9 @@ export default function CheckoutPage() {
           })),
       };
       const signature = JSON.stringify(orderBody);
-      if (checkoutAttempt.current.signature !== signature) checkoutAttempt.current = { signature, key: crypto.randomUUID() };
+      // Survives a reload: the same order body reuses the key, so the server replays the first order.
       const orderRes = await apiFetch("/api/orders", {
-        method: "POST", headers: { "Idempotency-Key": checkoutAttempt.current.key }, body: signature,
+        method: "POST", headers: { "Idempotency-Key": checkoutIdempotencyKey(signature) }, body: signature,
       });
       const orderJson = await orderRes.json();
       if (!orderRes.ok || orderJson.error) {

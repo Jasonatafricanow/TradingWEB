@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { clearCheckoutAttempt } from "@/lib/checkout-attempt";
 import { apiFetch } from "@/lib/client-api";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -25,6 +26,8 @@ export default function CheckoutSuccessPage() {
     let active = true;
     const id = new URLSearchParams(window.location.search).get("order_id");
     if (!id) { setPaymentState(PAYMENT_STATE.unknown); return; }
+    // The order exists now; a new checkout in this tab must get a new key.
+    clearCheckoutAttempt();
     apiFetch(`/api/orders/${encodeURIComponent(id)}`).then(async response => {
       if (!response.ok) throw new Error("Order unavailable");
       const json = await response.json();

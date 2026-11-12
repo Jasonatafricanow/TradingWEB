@@ -21,6 +21,7 @@ export default defineConfig({
       "src/app/api/auth/__tests__/**/*.test.ts",
       "src/lib/__tests__/version.test.ts",
       "src/lib/__tests__/csv-stream.test.ts",
+      "src/lib/__tests__/checkout-attempt.test.ts",
       "scripts/**/*.test.ts",
     ],
   },
