@@ -38,6 +38,8 @@ interface Customer {
   tags?: string
 }
 
+const PAGE_SIZE = 50
+
 const TIER_LABELS: Record<string, string> = {
   vip: "VIP", active: "Active", new: "New", at_risk: "At Risk", lost: "Lost",
 };
@@ -54,18 +56,35 @@ export default function AdminCustomersPage() {
   const [search, setSearch] = useState("")
   const [tierFilter, setTierFilter] = useState("all")
   const [tagFilter, setTagFilter] = useState("")
+  const [page, setPage] = useState(1)
+  const [total, setTotal] = useState(0)
+  const [summary, setSummary] = useState<{ orders: number; revenue: number } | null>(null)
+  const [jump, setJump] = useState("")
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE))
+
+  // Search runs on the server across all customers (it used to filter only the first 50 loaded).
+  const [query, setQuery] = useState("")
+  useEffect(() => {
+    const timer = setTimeout(() => { setQuery(search.trim()); setPage(1) }, 300)
+    return () => clearTimeout(timer)
+  }, [search])
 
   const load = async () => {
     setLoading(true)
     try {
-      const res = await apiFetch("/api/admin/customers")
+      const params = new URLSearchParams({ page: String(page), pageSize: String(PAGE_SIZE) })
+      if (query) params.set("search", query)
+      const res = await apiFetch("/api/admin/customers?" + params.toString())
       const json = await res.json().catch(() => ({}))
       if (!res.ok || json.error) throw new Error(json.error || "Failed to load")
       setCustomers(json.data || [])
+      setTotal(Number(json.total || 0))
+      setSummary(json.summary ?? null)
     } catch (err) { toast.error(err instanceof Error ? err.message : "Failed to load") }
     finally { setLoading(false) }
   }
-  useEffect(() => { load() }, [])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { load() }, [page, query])
 
   // Create
   const [createOpen, setCreateOpen] = useState(false)
@@ -90,13 +109,8 @@ export default function AdminCustomersPage() {
     finally { setCreating(false) }
   }
 
+  // Tier and tag narrow the current page only; search and paging are server-side.
   const filtered = customers.filter((c) => {
-    if (!search) return true
-    const q = search.toLowerCase()
-    return String(c.email || "").toLowerCase().includes(q) ||
-      String(c.name || "").toLowerCase().includes(q) ||
-      String(c.user_id || "").includes(q)
-  }).filter((c) => {
     if (tierFilter === "all") return true;
     return c.tier === tierFilter;
   }).filter((c) => {
@@ -105,10 +119,8 @@ export default function AdminCustomersPage() {
     return tags.toLowerCase().includes(tagFilter.toLowerCase());
   })
 
-  const totalRevenue = customers.reduce((s, c) => s + Number(c.total_spent), 0)
-  const avgOrders = customers.length > 0
-    ? Math.round(customers.reduce((s, c) => s + Number(c.total_orders), 0) / customers.length)
-    : 0
+  const totalRevenue = summary?.revenue ?? 0
+  const avgOrders = total > 0 && summary ? Math.round(summary.orders / total) : 0
 
   // Loading skeleton
   if (loading) {
@@ -186,7 +198,7 @@ export default function AdminCustomersPage() {
               <CardTitle className="text-sm text-muted-foreground">{t("admin.customers_total")}</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{customers.length}</div>
+              <div className="text-2xl font-bold">{total}</div>
             </CardContent>
           </Card>
           <Card>
@@ -297,6 +309,29 @@ export default function AdminCustomersPage() {
                   ))}
                 </TableBody>
               </Table>
+            )}
+            {pageCount > 1 && (
+              <nav className="flex flex-wrap items-center justify-end gap-2 border-t p-3 text-sm" aria-label={t("common.pagination")}>
+                <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)} aria-label={t("common.previous_page")}>
+                  {t("common.previous")}
+                </Button>
+                <span className="tabular-nums">{page} / {pageCount}</span>
+                <Button variant="outline" size="sm" disabled={page >= pageCount} onClick={() => setPage(page + 1)} aria-label={t("common.next_page")}>
+                  {t("common.next")}
+                </Button>
+                <form
+                  className="flex items-center gap-1"
+                  onSubmit={(e) => {
+                    e.preventDefault()
+                    const target = Math.trunc(Number(jump))
+                    if (target >= 1 && target <= pageCount) setPage(target)
+                    setJump("")
+                  }}
+                >
+                  <Input type="number" min={1} max={pageCount} value={jump} onChange={(e) => setJump(e.target.value)} className="h-8 w-20" aria-label={t("common.go_to_page")} />
+                  <Button type="submit" variant="ghost" size="sm">{t("common.go")}</Button>
+                </form>
+              </nav>
             )}
           </CardContent>
         </Card>
