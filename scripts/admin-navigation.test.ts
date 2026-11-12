@@ -59,11 +59,12 @@ describe("admin navigation model", () => {
         "dashboard",
         "briefing",
         "orders",
-        "refunds",
         "customers",
         "reviews",
       ]),
     );
+    // Refund APIs reject support; the menu must not offer a page that always 403s.
+    expect(supportGroups.flatMap((group) => group.items.map((item) => item.id))).not.toContain("refunds");
   });
 
   it("keeps the existing menu while role lookup is unresolved and fails closed for unknown roles", () => {

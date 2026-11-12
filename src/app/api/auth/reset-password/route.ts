@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { verifyToken, hashPassword, passwordResetVersion, safeTimingEqualString } from "@/lib/auth-local"
+import { verifyToken, hashPasswordAsync as hashPassword, passwordResetVersion, safeTimingEqualString } from "@/lib/auth-local"
 import { db } from "@/lib/db"
 import { IS_DEMO_MODE } from "@/config/constants"
 import { AUTH_API_MESSAGES } from "@/lib/auth-api-messages"

@@ -96,7 +96,10 @@ export function errorResponse(err: unknown): NextResponse {
   }
   // 错误日志：5xx 写到 stderr，4xx 仅在开发环境输出。
   if (status >= 500) {
-    body.error = "Internal server error";
+    // Hide internal messages, but keep the stable code/retryable contract for clients.
+    body.error = err instanceof AppError
+      ? { code: err.code, message: "Internal server error", retryable: err.retryable }
+      : "Internal server error";
     console.error("[api-error]", { status, message, err });
   } else if (process.env.NODE_ENV !== "production") {
     console.warn("[api-warn]", { status, message });

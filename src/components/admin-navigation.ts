@@ -149,7 +149,8 @@ const ROLE_MENUS: Record<string, readonly string[]> = {
     "reviews", "briefing", "inventory", "imports", "redirects", "stores",
     "shipments", "payment-methods",
   ],
-  support: ["dashboard", "orders", "refunds", "customers", "reviews", "briefing"],
+  // Refund APIs are admin/operator only; support must not see a menu that always 403s.
+  support: ["dashboard", "orders", "customers", "reviews", "briefing"],
 };
 
 export function filterNavigationForRole(

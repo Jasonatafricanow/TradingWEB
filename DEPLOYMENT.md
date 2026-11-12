@@ -249,3 +249,16 @@ NEXT_PUBLIC_SITE_URL=https://example.com
 - `0003_create_users_table.sql` 幂等，仅在 `profiles` 表存在时回填
 - `0004_add_seo_meta_fields.sql` 逐列检查再 add
 - 执行后核对 Drizzle migration metadata 与 MySQL 实际 schema 一致
+
+### 0034–0036 必须先于代码上线
+
+以下三张表被新代码在主链路上直接读写，代码先上线会导致对应功能整体失败：
+
+| 迁移 | 表 | 代码缺表时的后果 |
+|---|---|---|
+| `0034_oauth_identities` | `oauth_identities` | Google / Apple 登录全部失败 |
+| `0035_order_stock_allocations` | `order_stock_allocations` | 结账扣库存、退货回补失败 |
+| `0036_revoked_sessions` | `revoked_sessions` | 每个带登录态的请求都查此表，缺表时全站鉴权 500 |
+
+发布顺序：先在线上 `SHOW TABLES` 确认三张表不存在 → 执行迁移 → 再发布代码。
+`0008` 的 journal 断档与这三项无关，仍按「需线上 DESC 确认」处理，不要顺带补跑。
