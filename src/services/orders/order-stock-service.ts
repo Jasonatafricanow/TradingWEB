@@ -96,6 +96,7 @@ export async function restoreInventoryForOrder(
   opts: { operatorId?: string | null; reason?: string } = {},
 ): Promise<{ restored: boolean; reason?: "nothing_deducted" | "already_restored" }> {
   const result = await db.transaction(async (tx) => {
+    await tx.select({ id: orders.id }).from(orders).where(eq(orders.id, orderId)).for("update");
     if (!(await hasOrderStockTxn(orderId, "out", tx))) {
       return { restored: false, reason: "nothing_deducted" } as const;
     }
@@ -118,6 +119,7 @@ export async function restoreInventoryForOrder(
     ));
 
     await restoreInventory({
+      originalOrderId: orderId,
       storeId: order?.storeId ?? null,
       operatorId: opts.operatorId ?? null,
       referenceType: "order",

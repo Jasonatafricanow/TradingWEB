@@ -14,9 +14,13 @@ function fakeRepository(seed: {
   const state = {
     rows: (seed.rows ?? []).map((row) => ({ ...row })),
     transactions: [] as InventoryTransactionInput[],
+    allocations: [] as Array<{ id: string; orderId: string; inventoryId: string; productId: string; variantId: string | null; quantity: number; restoredQuantity: number }>,
   };
   const repository: InventoryAllocationRepository = {
-    lockInventoryRows: async () => state.rows,
+    saveAllocation: async input => { state.allocations.push({ ...input, id: String(state.allocations.length), restoredQuantity: 0 }); },
+    lockAllocations: async (orderId, productId, variantId) => state.allocations.filter(a => a.orderId === orderId && a.productId === productId && a.variantId === variantId).map(a => ({ ...a })),
+    setRestoredQuantity: async (id, quantity) => { state.allocations.find(a => a.id === id)!.restoredQuantity = quantity; },
+    lockInventoryRows: async () => state.rows.map(row => ({ ...row })),
     setInventoryRowStock: async (id, stock) => {
       const row = state.rows.find((entry) => entry.id === id);
       if (!row) throw new Error("ROW_NOT_FOUND");
@@ -155,6 +159,7 @@ describe("allocateInventory", () => {
     await allocateInventory({ ...baseInput, lines: [line] }, repository, {} as never);
     await restoreInventory({
       ...baseInput,
+      originalOrderId: "order-a",
       referenceType: "refund",
       referenceId: "refund-a",
       note: "POS refund",
@@ -164,4 +169,22 @@ describe("allocateInventory", () => {
     expect(state.rows[0].stock).toBe(5);
     expect(state.transactions.map((entry) => entry.type)).toEqual(["out", "in"]);
   });
+  it("returns to the exact split allocation and refuses over-restoration", async () => {
+    const { repository, state } = fakeRepository({ rows: [
+      { id: "local", storeId: "store-a", stock: 2 },
+      { id: "shared", storeId: null, stock: 4 },
+    ] });
+    const line = { productId: "p1", variantId: null, productType: "physical", title: "Item", quantity: 5 };
+    await allocateInventory({ ...baseInput, lines: [line] }, repository, {} as never);
+    await restoreInventory({ ...baseInput, originalOrderId: "order-a", lines: [line] }, repository, {} as never);
+    expect(state.rows.map(row => row.stock)).toEqual([2, 4]);
+    await expect(restoreInventory({ ...baseInput, originalOrderId: "order-a", lines: [{ ...line, quantity: 1 }] }, repository, {} as never)).rejects.toMatchObject({ code: "ORIGINAL_ALLOCATION_REQUIRED" });
+    expect(state.rows.map(row => row.stock)).toEqual([2, 4]);
+  });
+  it("does not guess a location for legacy sales without allocation evidence", async () => {
+    const { repository, state } = fakeRepository({ rows: [{ id: "local", storeId: "store-a", stock: 3 }] });
+    await expect(restoreInventory({ ...baseInput, originalOrderId: "legacy", lines: [{ productId: "p1", variantId: null, productType: "physical", title: "Item", quantity: 1 }] }, repository, {} as never)).rejects.toMatchObject({ code: "ORIGINAL_ALLOCATION_REQUIRED" });
+    expect(state.rows[0].stock).toBe(3);
+  });
+
 });
