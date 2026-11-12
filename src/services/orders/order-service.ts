@@ -12,6 +12,29 @@ import { OrderStatus, FinancialStatus, PaymentStatus } from '@/lib/enums';
 import { deductInventoryForOrderInTransaction } from './order-stock-service';
 import { insertOrderTimeline } from './order-timeline';
 import { deliverQueuedEmailSafely, recordOrderPaidEvents, recordPaymentConflictEvent } from '@/services/notifications/order-notification-service';
+import { getProgramSettings } from '@/services/promotions/program-settings';
+import { loadMemberPricing } from '@/services/promotions/member-pricing';
+import { combineDiscounts, walletShareCents } from '@/services/promotions/money-rules';
+import { debitWalletForOrder, getWalletBalanceCents, restoreWalletForOrder } from '@/services/promotions/wallet-service';
+import { accrueCommissionForPaidOrder, resolveCheckoutAffiliate } from '@/services/promotions/commission-ledger';
+import { formatCents, parseMoneyToCents } from './order-money';
+
+/** Payment-ledger method (and label) for the share an order paid from the wallet. */
+const WALLET_METHOD = 'wallet';
+
+function walletLedgerEntry(orderId: string, amount: string, method: string, recordedBy: string | null) {
+  return {
+    orderId,
+    channel: "storefront" as const,
+    method,
+    label: method,
+    amount,
+    reference: null,
+    providerTransactionId: `wallet:${orderId}`,
+    status: "recorded" as const,
+    recordedBy,
+  };
+}
 
 interface PricedOrderItem {
   id: string;
@@ -49,6 +72,10 @@ export async function createOrder(input: {
   shipping_cost?: string;
   delivery_date?: string;
   delivery_time_slot?: string;
+  /** Pay what the wallet allows (program switch and cap apply). */
+  use_wallet?: boolean;
+  /** Referral code captured from ?ref= within the attribution window. */
+  affiliate_code?: string;
 }) {
   const orderId = randomUUID();
   const orderNo = generateOrderNo();
@@ -211,6 +238,32 @@ const [countRows] = await db.$client.execute(
     discountAmount = Math.min(v.discount, subtotal);
   }
 
+  // ── Member discount (program switch, tier and its validity window) ──
+  const programs = await getProgramSettings();
+  const now = new Date();
+  const merchandiseCents = Math.round(subtotal * 100);
+  let memberTierId: string | null = null;
+  let memberDiscountCents = 0;
+  if (programs.membership.enabled) {
+    const member = await loadMemberPricing(input.user_id, now);
+    const combined = combineDiscounts({
+      merchandiseCents,
+      couponCents: Math.round(discountAmount * 100),
+      memberBps: member.discountBps,
+      stackMode: programs.membership.stackMode,
+    });
+    if (combined.memberCents > 0) {
+      memberTierId = member.tier?.id ?? null;
+      memberDiscountCents = combined.memberCents;
+    }
+    if (combined.couponCents === 0 && couponId) {
+      // "best" mode: the member discount saves more, so the coupon is not used.
+      couponId = null;
+      discountAmount = 0;
+    }
+  }
+  const memberDiscount = memberDiscountCents / 100;
+
   // Shipping is priced from the selected zone on the server; a client-sent
   // shipping_cost is ignored so the buyer cannot choose their own fee.
   let shippingCost = 0;
@@ -219,9 +272,26 @@ const [countRows] = await db.$client.execute(
     const [zone] = await db.select().from(deliveryZones)
       .where(and(eq(deliveryZones.id, deliveryZoneId), eq(deliveryZones.is_active, true))).limit(1);
     if (!zone) throw new ValidationError('Delivery zone is not available');
-    shippingCost = computeZoneShipping(zone, subtotal - discountAmount);
+    shippingCost = computeZoneShipping(zone, subtotal - discountAmount - memberDiscount);
   }
-  const totalAmount = Math.max(0, subtotal - discountAmount + shippingCost).toFixed(2);
+  const payableCents = Math.max(0, merchandiseCents - Math.round(discountAmount * 100) - memberDiscountCents + Math.round(shippingCost * 100));
+
+  // ── Wallet share (re-checked under lock when debited) ──
+  let walletCents = 0;
+  if (input.use_wallet && programs.wallet.enabled) {
+    walletCents = walletShareCents({
+      payableCents,
+      balanceCents: await getWalletBalanceCents(input.user_id, now),
+      maxPercent: programs.wallet.maxPercent,
+    });
+  }
+  const totalAmount = formatCents(payableCents - walletCents);
+  const paidByWallet = walletCents > 0 && payableCents - walletCents === 0;
+
+  // ── Affiliate attribution (validated now, commission decided when paid) ──
+  const affiliateId = programs.affiliate.enabled
+    ? await resolveCheckoutAffiliate(input.affiliate_code, input.user_id)
+    : null;
 
   await posTransaction(async (tx) => {
     await tx.insert(orders).values({
@@ -236,22 +306,56 @@ const [countRows] = await db.$client.execute(
       status: OrderStatus.Pending,
       financial_status: FinancialStatus.Pending,
       payment_status: PaymentStatus.Unpaid,
-      payment_method: emptyToNull(input.payment_method),
+      payment_method: paidByWallet ? 'wallet' : emptyToNull(input.payment_method),
       total_amount: totalAmount,
       buyer_email: emptyToNull(input.buyer_email),
       buyer_name: emptyToNull(input.buyer_name),
       buyer_phone: emptyToNull(input.buyer_phone),
       coupon_id: couponId,
       discount_amount: discountAmount > 0 ? discountAmount.toFixed(2) : null,
+      member_tier_id: memberTierId,
+      member_discount_amount: memberDiscountCents > 0 ? formatCents(memberDiscountCents) : null,
+      wallet_amount: formatCents(walletCents),
+      affiliate_id: affiliateId,
     });
 
     for (const item of pricedItems) {
       await tx.insert(orderItems).values(item);
     }
+    // Throws (and rolls the order back) if the balance changed since it was read.
+    await debitWalletForOrder(input.user_id, orderId, walletCents, tx, now);
   });
+
+  if (paidByWallet) {
+    await markOrderPaidIfNotAlready(orderId, { payment_id: `wallet:${orderId}`, source: 'wallet' });
+  }
 
   const [order] = await posTransaction(tx => tx.select().from(orders).where(eq(orders.id, orderId)).limit(1));
   return order;
+}
+
+/**
+ * Cancels an unpaid order and gives its wallet share back, in one transaction.
+ * Returns false when the order was not pending/unpaid (nothing changed).
+ */
+export async function cancelUnpaidOrder(orderId: string, reason: string): Promise<boolean> {
+  const programs = await getProgramSettings();
+  return db.transaction(async (tx) => {
+    const result = await tx.update(orders).set({ status: 'cancelled', updated_at: new Date() })
+      .where(and(eq(orders.id, orderId), eq(orders.status, 'pending'), ne(orders.payment_status, 'paid')));
+    const changed = (result as unknown as [{ affectedRows: number }])[0]?.affectedRows ?? 0;
+    if (changed < 1) return false;
+    await restoreWalletForOrder(orderId, tx, { graceDays: programs.wallet.restoreGraceDays, reason });
+    await insertOrderTimeline({
+      order_id: orderId,
+      action: 'cancelled',
+      description: reason,
+      old_value: 'pending',
+      new_value: 'cancelled',
+      operator_id: null,
+    }, tx);
+    return true;
+  });
 }
 
 export async function getOrder(orderId: string) {
@@ -461,17 +565,25 @@ export async function markOrderPaidIfNotAlready(
         await consumeCouponInTransaction(order.coupon_id, tx);
       }
 
-      await recordOrderPayment({
-        orderId: order.id,
-        channel: order.source === "pos" ? "pos" : "storefront",
-        method: order.payment_method || "unknown",
-        label: order.payment_method || "Unknown",
-        amount: order.total_amount,
-        reference: null,
-        providerTransactionId: payload.payment_id,
-        status: "recorded",
-        recordedBy: payload.operator_id ?? null,
-      }, tx);
+      const walletCents = parseMoneyToCents(String(order.wallet_amount ?? '0.00'));
+      if (parseMoneyToCents(String(order.total_amount)) > 0 || walletCents === 0) {
+        await recordOrderPayment({
+          orderId: order.id,
+          channel: order.source === "pos" ? "pos" : "storefront",
+          method: order.payment_method || "unknown",
+          label: order.payment_method || "Unknown",
+          amount: order.total_amount,
+          reference: null,
+          providerTransactionId: payload.payment_id,
+          status: "recorded",
+          recordedBy: payload.operator_id ?? null,
+        }, tx);
+      }
+      if (walletCents > 0) {
+        await recordOrderPayment(walletLedgerEntry(order.id, formatCents(walletCents), WALLET_METHOD, payload.operator_id ?? null), tx);
+      }
+
+      await accrueCommissionForPaidOrder(order, tx, await getProgramSettings(tx));
 
       if (stock.deducted) {
         await insertOrderTimeline({

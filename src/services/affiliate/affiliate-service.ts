@@ -64,8 +64,8 @@ export async function getMyAffiliate(userId: string): Promise<Record<string, any
 export async function getAffiliateDashboard(affiliateId: string): Promise<Record<string, any>> {
   const [[affRows], [refRows], [earnRows]] = await Promise.all([
     db.$client.execute('SELECT * FROM affiliates WHERE id = ?', [affiliateId]),
-    db.$client.execute('SELECT * FROM referrals WHERE affiliate_id = ?', [affiliateId]),
-    db.$client.execute('SELECT commission FROM referrals WHERE affiliate_id = ? AND status = ?', [affiliateId, 'approved']),
+    db.$client.execute("SELECT * FROM referrals WHERE affiliate_id = ? AND kind IN ('commission', 'reversal')", [affiliateId]),
+    db.$client.execute("SELECT commission FROM referrals WHERE affiliate_id = ? AND status = ? AND kind IN ('commission', 'reversal')", [affiliateId, 'approved']),
   ]);
   const affiliate = (affRows as Record<string, any>[])[0];
   const referrals = refRows as Record<string, any>[];
@@ -103,7 +103,7 @@ export async function requestPayout(affiliateId: string, amount: number): Promis
       [(balance - payoutAmount).toFixed(2), affiliateId]
     );
     await connection.execute(
-      'INSERT INTO referrals (id, affiliate_id, order_id, commission, rate, status) VALUES (?, ?, ?, ?, ?, ?)',
+      "INSERT INTO referrals (id, affiliate_id, order_id, commission, rate, status, kind) VALUES (?, ?, ?, ?, ?, ?, 'payout')",
       [id, affiliateId, payoutOrderId, payoutAmount.toFixed(2), 0, 'pending']
     );
     await connection.commit();
@@ -190,33 +190,4 @@ export async function rejectPayout(id: string) {
 
   const [rows] = await db.$client.execute('SELECT * FROM referrals WHERE id = ?', [id]);
   return (rows as Record<string, any>[])[0];
-}
-
-export async function calculateCommission(orderId: string, affiliateCode: string) {
-  const [orderRows] = await db.$client.execute('SELECT total_amount, affiliate_code FROM orders WHERE id = ?', [orderId]);
-  const order = (orderRows as { total_amount: string; affiliate_code: string }[])[0];
-  if (!order || order.affiliate_code !== affiliateCode) return;
-  const [affRows] = await db.$client.execute('SELECT * FROM affiliates WHERE code = ?', [affiliateCode]);
-  const affiliate = (affRows as Record<string, any>[])[0];
-  if (!affiliate || affiliate.status !== 'active') return;
-  const rate = parseFloat(affiliate.rate);
-  const commission = parseFloat(order.total_amount) * (rate / 100);
-  const refId = randomUUID();
-  await db.$client.execute(
-    'INSERT INTO referrals (id, affiliate_id, order_id, commission, rate, status) VALUES (?, ?, ?, ?, ?, ?)',
-    [refId, affiliate.id, orderId, commission.toFixed(2), rate.toFixed(2), 'pending']
-  );
-  await db.$client.execute(
-    'UPDATE affiliates SET balance = ?, total_earned = ? WHERE id = ?',
-    [(parseFloat(affiliate.balance) + commission).toFixed(2), (parseFloat(affiliate.total_earned) + commission).toFixed(2), affiliate.id]
-  );
-}
-
-export async function releasePendingCommissions() {
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString();
-  const [result] = await db.$client.execute(
-    'UPDATE referrals SET status = ? WHERE status = ? AND created_at < ?',
-    ['approved', 'pending', thirtyDaysAgo]
-  );
-  return { released: ((result as { affectedRows?: number })?.affectedRows) || 0 };
 }

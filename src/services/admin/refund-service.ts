@@ -1,3 +1,4 @@
+import { applyRefundMoneyEffects } from '@/services/promotions/refund-effects';
 import { posTransaction } from "./pos-idempotency-service";
 import { PayPalProvider } from "@/services/payment/paypal-provider";
 import { db } from '@/lib/db';
@@ -199,9 +200,11 @@ export async function completeRefund(refundId: string, transactionId?: string, a
       admin_note: `${refund.admin_note || ''}\nPayPal refund: ${transactionId}`.trim() }).where(eq(refunds.id, refundId));
     await tx.update(orders).set({ refunded_total: formatCents(total), financial_status: full ? 'refunded' : 'partially_refunded',
       ...(full ? { payment_status: 'refunded' } : {}) }).where(eq(orders.id, order.id));
+    const effects = await applyRefundMoneyEffects(order, { key: refundId, cents: parseMoneyToCents(refund.amount), full }, tx);
     await logAction({ userId: actorId ?? null, action: 'refund.complete', entityType: 'refund', entityId: refundId,
       details: { order_id: order.id, order_no: order.order_no, amount: refund.amount, currency: order.currency || 'USD',
-        provider_refund_id: transactionId, source: actorId ? 'admin' : 'provider_webhook', full } }, tx);
+        provider_refund_id: transactionId, source: actorId ? 'admin' : 'provider_webhook', full,
+        commission_reversed: effects.commission?.reversed ?? null, wallet_restored: formatCents(effects.walletRestoredCents) } }, tx);
     const [data] = await tx.select().from(refunds).where(eq(refunds.id, refundId)).limit(1);
     return data;
   });

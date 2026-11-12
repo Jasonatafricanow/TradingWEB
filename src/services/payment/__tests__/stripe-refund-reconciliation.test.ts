@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-const mocks = vi.hoisted(() => ({ charge: vi.fn(), intent: vi.fn(), session: vi.fn(), transaction: vi.fn(), select: vi.fn(), update: vi.fn(), insert: vi.fn() }));
+const mocks = vi.hoisted(() => ({ charge: vi.fn(), intent: vi.fn(), session: vi.fn(), transaction: vi.fn(), select: vi.fn(), update: vi.fn(), insert: vi.fn(),
+  refundEffects: vi.fn().mockResolvedValue({ commission: null, walletRestoredCents: 0 }) }));
+vi.mock("@/services/promotions/refund-effects", () => ({ applyRefundMoneyEffects: mocks.refundEffects }));
 vi.mock("stripe", () => ({ default: class { charges = { retrieve: mocks.charge }; paymentIntents = { retrieve: mocks.intent }; checkout = { sessions: { retrieve: mocks.session } }; } }));
 vi.mock("@/lib/db", () => ({ db: { transaction: mocks.transaction, select: mocks.select } }));
 import { reconcileStripeChargeRefund } from "../stripe-refund-reconciliation";
@@ -29,6 +31,8 @@ describe("Stripe cumulative refund events", () => {
     setup(); mocks.charge.mockResolvedValueOnce({ ...(await mocks.charge()), amount_refunded: 2000 });
     await reconcileStripeChargeRefund("ch_1");
     expect(mocks.update).toHaveBeenCalledWith(expect.objectContaining({ refunded_total: "20.00", payment_status: "refunded" }));
+    // Only the newly refunded amount is passed on (commission reversal / wallet return).
+    expect(mocks.refundEffects).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({ full: true }), expect.anything());
   });
   it("rejects a different original payment", async () => {
     setup(); mocks.session.mockResolvedValueOnce({ payment_intent: "pi_other" });

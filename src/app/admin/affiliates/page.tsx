@@ -17,10 +17,12 @@ import {
 import { toast } from "sonner";
 import { PageHeader } from "../_components";
 import { ArrowsClockwise, CheckCircle, Plus, ShareNetwork, SignOut, Warning, XCircle } from "@phosphor-icons/react";
+import { AffiliateCommissionDialog } from "./commission-dialog";
 
 interface AffiliateData {
   id: string; user_id: string; code: string; status: string;
   nickname?: string; name?: string; email?: string; rate?: string;
+  max_commission?: string | null; commission_starts_at?: string | null; commission_ends_at?: string | null;
   balance?: string; commission_rate?: string; total_earned?: string;
   total_paid?: string; clicks?: number; conversions?: number;
   exit_settlement?: string; exit_settled_at?: string;
@@ -207,7 +209,8 @@ export default function AdminAffiliatesPage() {
                     <TableCell>${formatMoney(a.balance)}</TableCell>
                     <TableCell>${formatMoney(a.total_earned)}</TableCell>
                     <TableCell><Badge variant={a.status === "active" ? "default" : "destructive"}>{a.status}</Badge></TableCell>
-                    <TableCell>
+                    <TableCell className="flex gap-1">
+                      <AffiliateCommissionDialog affiliate={a} onSaved={load} />
                       <Button variant="ghost" size="sm" onClick={() => handleReview(a.id, a.status === "active" ? "suspended" : "active")}>
                         {a.status === "active" ? "Suspend" : "Activate"}
                       </Button>

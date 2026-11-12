@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-const mocks = vi.hoisted(() => ({ verify: vi.fn(), refund: vi.fn(), transaction: vi.fn() }));
+const mocks = vi.hoisted(() => ({ verify: vi.fn(), refund: vi.fn(), transaction: vi.fn(),
+  refundEffects: vi.fn().mockResolvedValue({ commission: null, walletRestoredCents: 0 }) }));
+vi.mock("@/services/promotions/refund-effects", () => ({ applyRefundMoneyEffects: mocks.refundEffects }));
 vi.mock("@/services/payment/paypal-provider", () => ({ PayPalProvider: class { getRefundById = mocks.verify; refund = mocks.refund; } }));
 vi.mock("@/lib/db", () => ({ db: { transaction: mocks.transaction } }));
 import { completeRefund, submitPayPalRefund } from "../refund-service";

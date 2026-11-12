@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { checkoutIdempotencyKey } from "@/lib/checkout-attempt";
+import { combineDiscounts, walletShareCents } from "@/services/promotions/money-rules";
+import { readAffiliateRef } from "@/lib/affiliate-ref";
 import { useRouter } from "next/navigation";
 import { useCart } from "@/contexts/cart-context";
 import { useAuth } from "@/contexts/auth-context";
@@ -59,6 +61,22 @@ export default function CheckoutPage() {
   const [couponMessage, setCouponMessage] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const [couponLoading, setCouponLoading] = useState(false);
 
+  // ── Member discount / wallet (programs an admin can switch on) ──
+  interface CheckoutPrograms {
+    discount: { enabled: boolean; percent: number; stack_mode: "best" | "stack"; tier_name: string | null };
+    wallet: { enabled: boolean; balance: number; max_percent: number };
+    affiliate: { enabled: boolean; attribution_days: number };
+  }
+  const [programs, setPrograms] = useState<CheckoutPrograms | null>(null);
+  const [useWallet, setUseWallet] = useState(false);
+  useEffect(() => {
+    if (!user) return;
+    apiFetch("/api/memberships/me")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((json) => { if (json?.data?.discount && json.data.wallet) setPrograms(json.data as CheckoutPrograms); })
+      .catch(() => {});
+  }, [user]);
+
   // ── Maputo Delivery ──
   interface CheckoutZone { id: string; name: string; name_en: string | null; base_rate: string; free_shipping_min: string | null; time_slots: unknown; }
   const [deliveryZones, setDeliveryZones] = useState<CheckoutZone[]>([]);
@@ -67,8 +85,19 @@ export default function CheckoutPage() {
   const [deliveryTimeSlot, setDeliveryTimeSlot] = useState("");
   const selectedDeliveryZone = deliveryZones.find(zone => zone.id === selectedZone);
   const shippingThreshold = Number(selectedDeliveryZone?.free_shipping_min || 0);
+  // Same rules as the server (src/services/promotions/money-rules.ts); the server result is final.
+  const merchandiseCents = Math.round(total * 100);
+  const discounts = programs?.discount.enabled
+    ? combineDiscounts({
+        merchandiseCents,
+        couponCents: Math.round(couponDiscount * 100),
+        memberBps: Math.round(programs.discount.percent * 100),
+        stackMode: programs.discount.stack_mode,
+      })
+    : { couponCents: Math.min(Math.round(couponDiscount * 100), merchandiseCents), memberCents: 0 };
+  const afterDiscounts = (merchandiseCents - discounts.couponCents - discounts.memberCents) / 100;
   const shippingCost = selectedDeliveryZone
-    ? (shippingThreshold > 0 && Math.max(0, total - couponDiscount) >= shippingThreshold ? 0 : Number(selectedDeliveryZone.base_rate))
+    ? (shippingThreshold > 0 && Math.max(0, afterDiscounts) >= shippingThreshold ? 0 : Number(selectedDeliveryZone.base_rate))
     : 0;
   const [renderedAt] = useState(() => Date.now());
 
@@ -79,7 +108,11 @@ export default function CheckoutPage() {
       .catch(() => {});
   }, []);
 
-  const payable = Math.max(0, total - couponDiscount) + shippingCost;
+  const payableCents = Math.max(0, Math.round(afterDiscounts * 100)) + Math.round(shippingCost * 100);
+  const walletCents = useWallet && programs?.wallet.enabled
+    ? walletShareCents({ payableCents, balanceCents: Math.round(programs.wallet.balance * 100), maxPercent: programs.wallet.max_percent })
+    : 0;
+  const payable = (payableCents - walletCents) / 100;
 
   async function applyCoupon() {
     const code = couponCode.trim();
@@ -175,6 +208,8 @@ export default function CheckoutPage() {
           shipping_cost: shippingCost > 0 ? shippingCost.toFixed(2) : undefined,
           delivery_date: deliveryDate || undefined,
           delivery_time_slot: deliveryTimeSlot || undefined,
+          useWallet: walletCents > 0 ? true : undefined,
+          affiliateCode: programs?.affiliate.enabled ? readAffiliateRef(programs.affiliate.attribution_days) ?? undefined : undefined,
           items: items.map((item) => ({
             product_id: item.id,
             variant_id: item.variant_id || null,
@@ -188,6 +223,9 @@ export default function CheckoutPage() {
         method: "POST", headers: { "Idempotency-Key": checkoutIdempotencyKey(signature) }, body: signature,
       });
       const orderJson = await orderRes.json();
+      if (orderRes.status === 409 && orderJson.code === "WALLET_INSUFFICIENT") {
+        throw new Error(t("checkout.wallet_changed"));
+      }
       if (!orderRes.ok || orderJson.error) {
         throw new Error(orderJson.error || "Order creation failed");
       }
@@ -195,6 +233,13 @@ export default function CheckoutPage() {
       const orderId = orderJson.id || orderJson.data?.id;
       if (!orderId) {
         throw new Error("Order creation failed");
+      }
+
+      // Fully paid from the wallet: nothing left to collect.
+      if ((orderJson.payment_status || orderJson.data?.payment_status) === "paid") {
+        clearCart();
+        router.push(`/checkout/success?order_id=${orderId}`);
+        return;
       }
 
       // 线下支付：不调 /api/payment/create，直接跳成功页
@@ -344,11 +389,35 @@ export default function CheckoutPage() {
                 <span>{t("checkout.subtotal")}</span>
                 <span>{formatPrice(total)}</span>
               </div>
-              {couponDiscount > 0 && (
+              {discounts.couponCents > 0 && (
                 <div className="flex justify-between text-green-600">
                   <span>{t("checkout.discount")}</span>
-                  <span>-{formatPrice(couponDiscount)}</span>
+                  <span>-{formatPrice(discounts.couponCents / 100)}</span>
                 </div>
+              )}
+              {couponDiscount > 0 && discounts.couponCents === 0 && (
+                <p className="text-xs text-amber-600">{t("checkout.coupon_replaced_by_member")}</p>
+              )}
+              {discounts.memberCents > 0 && (
+                <div className="flex justify-between text-green-600">
+                  <span>{translate(locale, "checkout.member_discount", { tier: programs?.discount.tier_name || "", percent: String(programs?.discount.percent ?? 0) })}</span>
+                  <span>-{formatPrice(discounts.memberCents / 100)}</span>
+                </div>
+              )}
+              {shippingCost > 0 && (
+                <div className="flex justify-between text-gray-600">
+                  <span>{t("checkout.shipping")}</span>
+                  <span>{formatPrice(shippingCost)}</span>
+                </div>
+              )}
+              {programs?.wallet.enabled && programs.wallet.balance > 0 && (
+                <label className="flex items-center justify-between gap-2 text-gray-700">
+                  <span className="flex items-center gap-2">
+                    <input type="checkbox" checked={useWallet} onChange={(e) => setUseWallet(e.target.checked)} />
+                    {translate(locale, "checkout.use_wallet", { balance: formatPrice(programs.wallet.balance) })}
+                  </span>
+                  {walletCents > 0 && <span className="text-green-600">-{formatPrice(walletCents / 100)}</span>}
+                </label>
               )}
               <div className="flex justify-between text-lg font-bold text-gray-900 pt-1">
                 <span>{t("cart.total")}</span>

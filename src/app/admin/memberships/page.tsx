@@ -19,6 +19,8 @@ import {
 } from "@/components/ui/dialog"
 import { PageHeader } from "../_components";
 import { ArrowsClockwise, Crown, FloppyDisk, Plus } from "@phosphor-icons/react";
+import { ValidityWindowFields, fromLocalInput, toLocalInput } from "@/components/admin/validity-window";
+import { MemberAssignCard } from "./member-assign-card";
 
 interface Tier {
   id: string
@@ -29,6 +31,11 @@ interface Tier {
   badge_color?: string
   benefits?: string
   is_active: boolean
+  discount_starts_at?: string | null
+  discount_ends_at?: string | null
+  /** datetime-local editing values */
+  _start?: string
+  _end?: string
 }
 
 export default function AdminMembershipsPage() {
@@ -44,7 +51,7 @@ export default function AdminMembershipsPage() {
       setTiers(json.data || [])
       // init edit values
       const vals: Record<string, Tier> = {}
-      for (const t of json.data || []) vals[t.id] = { ...t }
+      for (const t of json.data || []) vals[t.id] = { ...t, _start: toLocalInput(t.discount_starts_at), _end: toLocalInput(t.discount_ends_at) }
       setEditValues(vals)
     } catch {
       toast.error("加载会员等级失败")
@@ -90,12 +97,12 @@ export default function AdminMembershipsPage() {
   }
 
   const handleSave = async (id: string) => {
-    const val = editValues[id]
+    const { _start, _end, ...val } = editValues[id]
     try {
       const res = await apiFetch("/api/admin/memberships", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(val),
+        body: JSON.stringify({ ...val, discount_starts_at: fromLocalInput(_start || ""), discount_ends_at: fromLocalInput(_end || "") }),
       })
       if (!res.ok) throw new Error()
       toast.success("已保存")
@@ -160,6 +167,8 @@ export default function AdminMembershipsPage() {
           </Dialog>
         </div>
 
+        <MemberAssignCard tiers={tiers} />
+
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {tiers.map((tier) => {
             const edit = editValues[tier.id] || tier
@@ -190,6 +199,11 @@ export default function AdminMembershipsPage() {
                       <Label className="text-xs">折扣 (%)</Label>
                       <Input type="number" value={edit.discount_percent} onChange={(e) => update(tier.id, "discount_percent", e.target.value)} className="h-8 text-sm" />
                     </div>
+                  </div>
+                  <div>
+                    <Label className="text-xs">{t("memberships.discount_window")}</Label>
+                    <ValidityWindowFields compact start={edit._start || ""} end={edit._end || ""}
+                      onStart={(v) => update(tier.id, "_start", v)} onEnd={(v) => update(tier.id, "_end", v)} />
                   </div>
                   <div>
                     <Label className="text-xs">权益描述</Label>

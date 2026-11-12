@@ -12,11 +12,13 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription
 } from "@/components/ui/dialog"
 import { toast } from "sonner"
+import { apiFetch } from "@/lib/client-api"
+import { translate } from "@/i18n"
 import { Copy, CurrencyDollar, ShareNetwork, SignOut, TrendUp, Users, Warning } from "@phosphor-icons/react";
 
 export default function AffiliateDashboardPage() {
   const router = useRouter()
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const { user } = useAuth()
   const [affiliate, setAffiliate] = useState<any>(null)
   const [dashboard, setDashboard] = useState<any>(null)
@@ -26,15 +28,17 @@ export default function AffiliateDashboardPage() {
   const [loading, setLoading] = useState(true)
   const [showExitDialog, setShowExitDialog] = useState(false)
   const [exiting, setExiting] = useState(false)
+  const [programLive, setProgramLive] = useState<boolean | null>(null)
 
   useEffect(() => {
     if (!user) return
     Promise.all([
-      fetch("/api/affiliates/me").then(r => r.json()),
-      fetch("/api/affiliates/dashboard").then(r => r.json()),
-      fetch("/api/affiliates/dashboard/extra").then(r => r.json()),
-      fetch("/api/affiliates/eligibility").then(r => r.json()),
+      apiFetch("/api/affiliates/me").then(r => r.json()),
+      apiFetch("/api/affiliates/dashboard").then(r => r.json()),
+      apiFetch("/api/affiliates/dashboard/extra").then(r => r.json()),
+      apiFetch("/api/affiliates/eligibility").then(r => r.json()),
     ]).then(([me, dash, ext, elig]) => {
+      setProgramLive(dash.data?.program?.enabled === true)
       setAffiliate(me.data)
       setDashboard(dash.data)
       setExtra(ext.data)
@@ -45,7 +49,7 @@ export default function AffiliateDashboardPage() {
   const handleExit = async () => {
     setExiting(true)
     try {
-      const res = await fetch("/api/affiliates/exit", { method: "POST" })
+      const res = await apiFetch("/api/affiliates/exit", { method: "POST" })
       const json = await res.json()
       setSettlement(json.data)
       toast.success("退出结算完成")
@@ -64,8 +68,12 @@ export default function AffiliateDashboardPage() {
   return (
     <div className="mx-auto max-w-4xl px-4 py-8">
       <h1 className="text-2xl font-bold flex items-center gap-2 mb-6"><ShareNetwork className="h-6 w-6" /> 推广中心</h1>
-      {/* TW-16: no order is attributed to a referral link yet, so nothing accrues. */}
-      <Alert className="mb-6"><Warning className="h-4 w-4" /><AlertDescription>{t("affiliate.commission_not_live")}</AlertDescription></Alert>
+      {/* Commission accrues only while an admin has the affiliate program switched on. */}
+      {programLive === false ? (
+        <Alert className="mb-6"><Warning className="h-4 w-4" /><AlertDescription>{t("affiliate.commission_not_live")}</AlertDescription></Alert>
+      ) : programLive && (
+        <Alert className="mb-6"><AlertDescription>{translate(locale, "affiliate.commission_rules", { days: String(dashboard?.program?.hold_days ?? 0) })}</AlertDescription></Alert>
+      )}
 
       <div className="grid grid-cols-3 gap-4 mb-6">
         <Card><CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">累计收益</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-green-600">${parseFloat(affiliate.total_earned || "0").toFixed(2)}</div></CardContent></Card>

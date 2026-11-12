@@ -39,7 +39,15 @@ interface MembershipInfo {
 interface WalletInfo {
   balance: number
   currency: string
-  updated_at: string
+  enabled?: boolean
+  credits?: Array<{ remaining: string; expires_at: string | null }>
+}
+
+interface MemberDiscountInfo {
+  enabled: boolean
+  percent: number
+  tier_name: string | null
+  assigned_until: string | null
 }
 
 interface AvailableCoupon {
@@ -60,6 +68,7 @@ export default function AccountPage() {
   const [saving, setSaving] = useState(false);
   const [membership, setMembership] = useState<MembershipInfo | null>(null);
   const [wallet, setWallet] = useState<WalletInfo | null>(null);
+  const [memberDiscount, setMemberDiscount] = useState<MemberDiscountInfo | null>(null);
   const [coupons, setCoupons] = useState<AvailableCoupon[]>([]);
   const [loadingMembership, setLoadingMembership] = useState(true);
 
@@ -77,6 +86,7 @@ export default function AccountPage() {
       .then((j) => {
         setMembership(j.data?.membership || null);
         setWallet(j.data?.wallet || null);
+        setMemberDiscount(j.data?.discount || null);
         setCoupons(j.data?.coupons || []);
       })
       .catch(() => {})
@@ -85,6 +95,16 @@ export default function AccountPage() {
     // 加载地址
     fetchAddresses()
   }, [user, router, authLoading])
+
+  function walletNote(): string {
+    if (!wallet?.enabled) return t("account.wallet_not_at_checkout")
+    const next = (wallet.credits || [])
+      .filter((credit) => credit.expires_at)
+      .sort((a, b) => new Date(a.expires_at as string).getTime() - new Date(b.expires_at as string).getTime())[0]
+    return next
+      ? translate(locale, "account.wallet_next_expiry", { amount: `$${Number(next.remaining).toFixed(2)}`, date: new Date(next.expires_at as string).toLocaleDateString() })
+      : t("account.wallet_usable_at_checkout")
+  }
 
   const [addresses, setAddresses] = useState<any[]>([])
   const [addrForm, setAddrForm] = useState({ label: "", phone: "", address_line1: "", address_line2: "", city: "", state: "", zip: "", country: "Moz", is_default: false })
@@ -229,7 +249,7 @@ export default function AccountPage() {
                     <span className="text-sm font-normal text-muted-foreground ml-1">{wallet.currency}</span>
                   </div>
                   <div className="text-xs text-muted-foreground mt-1">
-                    {t("account.wallet_not_at_checkout")}
+                    {walletNote()}
                   </div>
                 </div>
                 <div className="hidden sm:flex h-16 w-16 items-center justify-center rounded-full bg-green-50">
@@ -329,11 +349,20 @@ export default function AccountPage() {
                     <Crown className="h-5 w-5" style={{ color: membership.tier?.badge_color || "#999" }} />
                     {membership.tier?.name || (locale === "zh" ? "普通会员" : "Member")}
                   </div>
-                  {/* TW-16: checkout pricing does not apply tier discounts yet; do not promise them. */}
-                  {parseFloat(membership.tier?.discount_percent || "0") > 0 && (
+                  {/* The discount checkout applies right now (program switch, tier, validity window). */}
+                  {memberDiscount?.enabled && memberDiscount.percent > 0 ? (
+                    <Badge variant="outline" className="mt-2 text-green-700">
+                      {translate(locale, "account.member_discount_active", { tier: memberDiscount.tier_name || "", percent: String(memberDiscount.percent) })}
+                    </Badge>
+                  ) : parseFloat(membership.tier?.discount_percent || "0") > 0 && (
                     <Badge variant="outline" className="mt-2 text-muted-foreground">
                       {translate(locale, "account.member_discount_not_applied", { percent: membership.tier?.discount_percent ?? "0" })}
                     </Badge>
+                  )}
+                  {memberDiscount?.assigned_until && (
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      {translate(locale, "account.member_tier_until", { date: new Date(memberDiscount.assigned_until).toLocaleDateString() })}
+                    </div>
                   )}
                 </div>
                 <div className="p-4 rounded-lg border">
@@ -362,7 +391,7 @@ export default function AccountPage() {
                     {locale === "zh" ? "钱包抵扣提示" : "Wallet Tip"}
                   </div>
                   <div className="text-sm text-amber-700">
-                    {t("account.wallet_not_at_checkout")}
+                    {walletNote()}
                   </div>
                 </div>
               )}

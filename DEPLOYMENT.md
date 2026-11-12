@@ -178,6 +178,14 @@ CRON_SECRET="<与 .env 一致的密钥>"
 邮件状态含义：`queued` 待发送，`sending` 发送中，`sent` 支付商已接收（不代表收件人已收到），`failed` 未配置/被拒/重试耗尽。
 需要 `RESEND_API_KEY` 和 `EMAIL_FROM`；未配置时邮件记为 `failed: provider_not_configured`，不会显示为已发送。
 
+### 3.4 推广佣金到期入账（/api/cron/affiliate-commissions）
+每小时执行。佣金在订单付款时记为 `pending`，过了冻结期（后台「会员与推广规则」里的天数）才计入推广者余额；每笔只入账一次，重复执行无副作用。
+冻结期设为 0 时付款即入账，不依赖这个任务。
+
+```bash
+0 * * * * curl -s -X POST -H "x-cron-secret: $CRON_SECRET" "https://fjglobal.online/api/cron/affiliate-commissions"
+```
+
 ---
 
 ## □ 3b. Nginx 限流
@@ -276,7 +284,7 @@ NEXT_PUBLIC_SITE_URL=https://example.com
 - `0004_add_seo_meta_fields.sql` 逐列检查再 add
 - 执行后核对 Drizzle migration metadata 与 MySQL 实际 schema 一致
 
-### 0034–0039 必须先于代码上线
+### 0034–0040 必须先于代码上线
 
 以下表和列被新代码在主链路上直接读写，代码先上线会导致对应功能整体失败：
 
@@ -288,14 +296,18 @@ NEXT_PUBLIC_SITE_URL=https://example.com
 | `0037_email_outbox_notification_dedupe` | `email_logs` 新增 body/dedupe_key 等列，`notifications.dedupe_key` | 邮件写日志失败；付款事务里的通知和确认邮件被跳过（付款本身不受影响，只记错误日志） |
 | `0038_pos_refund_tenders` | `pos_refund_tenders` | POS 退款、换货写退款方式失败（整笔回滚）；交班对账查询失败 |
 | `0039_relax_legacy_stock_transfer_columns` | `stock_transfers.product_id/quantity` 改为可空 | 严格模式下新建调拨一律失败（不跑也是现状：线上如能建调拨，说明这两列已可空，0039 会自动跳过） |
+| `0040_member_wallet_commission` | `orders` 新增会员折扣/钱包/推广人列，`wallet_credits`、`wallet_transactions`，等级/推广者有效期列，`referrals` 新增 kind/dedupe_key 等 | 下单写订单失败（全站结账不可用）；付款事务失败 |
 
 发布顺序：先在线上 `SHOW TABLES` 确认前三张表不存在，`DESC email_logs` / `DESC notifications` 看现有列 → 执行迁移 → 再发布代码。
-上线前先在一次性库上全量重放（本地已用 MySQL 8.4 跑通 0000→0039）：
+上线前先在一次性库上全量重放（本地已用 MySQL 8.4 跑通 0000→0040，0040 重复执行无报错）：
 
 ```bash
 MIGRATION_RECONCILIATION_ALLOW_DISPOSABLE_DB=1 DB_NAME=tw_replay_check DB_HOST=… DB_USER=… DB_PASSWORD=… \
   pnpm tsx scripts/migration-reconciliation/integration/replay-latest.ts
 ```
 
-0037、0039 每一步都先查 information_schema，已满足就跳过；如果线上 `email_logs` 用的不是 `to_email` 列（例如历史上手工建成 `recipient`），先停下核对，不要直接跑。
+0040 上线后三项功能（会员折扣、钱包、推广佣金）默认全部关闭，价格不变；由管理员在后台「会员与推广规则」逐项开启。
+0040 会把 `referrals` 里已有的提现/退出记录（`PAYOUT_`/`EXIT_` 开头）标为 `kind = 'payout'`，佣金查询不再把它们算进去。
+
+0037、0039、0040 每一步都先查 information_schema，已满足就跳过；如果线上 `email_logs` 用的不是 `to_email` 列（例如历史上手工建成 `recipient`），先停下核对，不要直接跑。
 `0008` 的 journal 断档与这三项无关，仍按「需线上 DESC 确认」处理，不要顺带补跑。

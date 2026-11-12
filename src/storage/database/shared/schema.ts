@@ -205,6 +205,11 @@ export const orders = mysqlTable(
 		tags: text("tags"),
 		coupon_id: varchar("coupon_id", { length: 36 }),
 		discount_amount: decimal("discount_amount", { precision: 10, scale: 2 }),
+		member_tier_id: varchar("member_tier_id", { length: 36 }),
+		member_discount_amount: decimal("member_discount_amount", { precision: 10, scale: 2 }),
+		/** Paid from the wallet; total_amount is what the external payment collects. */
+		wallet_amount: decimal("wallet_amount", { precision: 10, scale: 2 }).default("0.00").notNull(),
+		affiliate_id: varchar("affiliate_id", { length: 36 }),
 		has_refund: boolean("has_refund").default(false).notNull(),
 		refunded_total: decimal("refunded_total", { precision: 12, scale: 2 }).default("0.00").notNull(),
 		created_at: timestamp("created_at").defaultNow().notNull(),
@@ -223,6 +228,7 @@ export const orders = mysqlTable(
 		index("orders_store_staff_created_idx").on(table.store_id, table.staff_id, table.created_at, table.id),
 		index("orders_customer_created_idx").on(table.user_id, table.created_at, table.id),
 		index("orders_pickup_status_idx").on(table.pickup_store_id, table.fulfillment_status, table.created_at),
+		index("orders_affiliate_idx").on(table.affiliate_id),
 		uniqueIndex("orders_client_ref_unique_idx").on(table.client_ref),
 	]
 );
@@ -576,6 +582,8 @@ export const membershipTiers = mysqlTable(
 		benefits: text("benefits"),
 		is_active: boolean("is_active").default(true).notNull(),
 		type: varchar("type", { length: 20 }).default("warehouse").notNull(),
+		discount_starts_at: timestamp("discount_starts_at"),
+		discount_ends_at: timestamp("discount_ends_at"),
 		created_at: timestamp("created_at").defaultNow().notNull(),
 	},
 	(table) => [index("mt_level_idx").on(table.level)]
@@ -592,6 +600,9 @@ export const userMemberships = mysqlTable(
 		total_orders: int("total_orders").default(0).notNull(),
 		joined_at: timestamp("joined_at").defaultNow().notNull(),
 		updated_at: timestamp("updated_at"),
+		/** Tier granted by an admin, valid until assigned_until (null = no end). */
+		assigned_tier_id: varchar("assigned_tier_id", { length: 36 }),
+		assigned_until: timestamp("assigned_until"),
 	},
 	(table) => [index("um_user_id_idx").on(table.user_id)]
 );
@@ -1384,3 +1395,44 @@ export const revokedSessions = mysqlTable("revoked_sessions", {
   token_hash: char("token_hash", { length: 64 }).primaryKey(),
   expires_at: timestamp("expires_at").notNull(),
 }, table => [index("revoked_sessions_expiry_idx").on(table.expires_at)]);
+
+// Wallet credit lots (0040): each grant has its own expiry; spending takes
+// from the lots that expire first.
+export const walletCredits = mysqlTable(
+	"wallet_credits",
+	{
+		id: varchar("id", { length: 36 }).primaryKey(),
+		user_id: varchar("user_id", { length: 36 }).notNull(),
+		amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+		remaining: decimal("remaining", { precision: 10, scale: 2 }).notNull(),
+		source: varchar("source", { length: 32 }).notNull(),
+		note: varchar("note", { length: 255 }),
+		order_id: varchar("order_id", { length: 36 }),
+		expires_at: timestamp("expires_at"),
+		revoked_at: timestamp("revoked_at"),
+		created_by: varchar("created_by", { length: 36 }),
+		created_at: timestamp("created_at").defaultNow().notNull(),
+	},
+	(table) => [index("wallet_credits_user_idx").on(table.user_id, table.expires_at)]
+);
+
+export const walletTransactions = mysqlTable(
+	"wallet_transactions",
+	{
+		id: varchar("id", { length: 36 }).primaryKey(),
+		user_id: varchar("user_id", { length: 36 }).notNull(),
+		credit_id: varchar("credit_id", { length: 36 }).notNull(),
+		order_id: varchar("order_id", { length: 36 }),
+		type: varchar("type", { length: 20 }).notNull(),
+		amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+		note: varchar("note", { length: 255 }),
+		dedupe_key: varchar("dedupe_key", { length: 191 }),
+		created_by: varchar("created_by", { length: 36 }),
+		created_at: timestamp("created_at").defaultNow().notNull(),
+	},
+	(table) => [
+		uniqueIndex("wallet_transactions_dedupe_uq").on(table.dedupe_key),
+		index("wallet_transactions_user_idx").on(table.user_id, table.created_at),
+		index("wallet_transactions_order_idx").on(table.order_id),
+	]
+);

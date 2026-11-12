@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { captureAffiliateRef } from "@/lib/affiliate-ref";
 import { usePathname } from "next/navigation";
 import { AuthProvider, getStoredToken } from "@/contexts/auth-context";
 import { I18nProvider } from "@/contexts/i18n-context";
@@ -30,6 +31,7 @@ function PageViewTracker() {
 
     // ── 捕获 UTM / 推广参数 ──
     const params = new URLSearchParams(window.location.search);
+    captureAffiliateRef(window.location.search);
     const hasUtm = params.get("utm_source") || params.get("fbclid") || params.get("igshid");
 
     if (hasUtm) {

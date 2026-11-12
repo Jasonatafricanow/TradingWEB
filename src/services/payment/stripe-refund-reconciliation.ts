@@ -5,6 +5,7 @@ import { orders, orderTimeline } from "@/storage/database/shared/schema";
 import { formatCents, parseMoneyToCents } from "@/services/orders/order-money";
 import { randomUUID } from "node:crypto";
 import { TIMELINE_MESSAGES } from "@/lib/api-messages";
+import { applyRefundMoneyEffects } from "@/services/promotions/refund-effects";
 
 export async function reconcileStripeChargeRefund(chargeId: string) {
   if (!process.env.STRIPE_SECRET_KEY) throw new Error("Stripe not configured");
@@ -33,8 +34,14 @@ export async function reconcileStripeChargeRefund(chargeId: string) {
     // Fetch current provider state and monotonically apply its cumulative total.
     if (charge.amount_refunded <= parseMoneyToCents(order.refunded_total || "0.00")) return;
     const full = charge.amount_refunded === total;
+    const previouslyRefunded = parseMoneyToCents(order.refunded_total || "0.00");
     await tx.update(orders).set({ refunded_total: formatCents(charge.amount_refunded), has_refund: true,
       financial_status: full ? "refunded" : "partially_refunded", ...(full ? { payment_status: "refunded" } : {}) }).where(eq(orders.id, orderId));
     await tx.insert(orderTimeline).values({ id: randomUUID(), order_id: orderId, action: "refund_reconciled", description: TIMELINE_MESSAGES.stripeRefundReconciled(charge.id, formatCents(charge.amount_refunded)) });
+    await applyRefundMoneyEffects(order, {
+      key: `stripe:${charge.id}:${charge.amount_refunded}`,
+      cents: charge.amount_refunded - previouslyRefunded,
+      full,
+    }, tx);
   });
 }

@@ -8,6 +8,8 @@ import { addOrderTimeline } from '@/services/orders/order-timeline';
 import { createRefund } from './refund-service';
 import { logAction } from './audit-service';
 import { recordDeliveryFailedEvent, sendCustomerOrderEmail } from '@/services/notifications/order-notification-service';
+import { restoreWalletForOrder } from '@/services/promotions/wallet-service';
+import { getProgramSettings } from '@/services/promotions/program-settings';
 
 // P1-03:订单状态变更全部动作化。每个动作写 order_timeline,
 // 敏感动作(收款确认/取消/退款)另写 audit_logs。前端不允许随意 PATCH 字段。
@@ -88,6 +90,15 @@ export async function cancelAction(orderId: string, operator: Operator, reason?:
     await restoreInventoryForOrder(orderId, { operatorId: operator.id, reason: '订单取消回补库存' });
   } catch (e) {
     console.error('[order-actions] restore inventory failed:', e);
+  }
+
+  // An unpaid order gives its wallet share back; a paid one goes through refunds.
+  if (order.payment_status !== 'paid') {
+    const programs = await getProgramSettings();
+    await db.transaction((tx) => restoreWalletForOrder(orderId, tx, {
+      graceDays: programs.wallet.restoreGraceDays,
+      reason: `cancelled by staff ${operator.id ?? ''}`.trim(),
+    }));
   }
 
   await addOrderTimeline({
