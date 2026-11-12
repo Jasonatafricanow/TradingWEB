@@ -1,3 +1,4 @@
+import { db } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server"
 import { requireUser, requireStaffRole, errorResponse } from "@/services/auth/auth-middleware"
 
@@ -12,8 +13,10 @@ export async function POST(
     await requireStaffRole(request, ["admin", "operator"]);
     await requireUser(request)
     const { id } = await params
-    const result = await sendEmail(
-      id, "Retry", "Retry body")
+    const [rows] = await db.$client.execute("SELECT recipient, subject, body FROM email_logs WHERE id = ? LIMIT 1", [id]);
+    const original = (rows as Array<{ recipient: string; subject: string; body: string }>)[0];
+    if (!original) return NextResponse.json({ error: "Email log not found" }, { status: 404 });
+    const result = await sendEmail(original.recipient, original.subject, original.body)
 
     
 
