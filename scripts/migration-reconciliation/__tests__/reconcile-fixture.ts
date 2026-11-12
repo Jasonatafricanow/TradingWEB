@@ -14,7 +14,7 @@ import {
   type CollationPolicy,
   type CollationProfile,
 } from "../collation-policy";
-import { readRepositoryManifest } from "../repository-manifest";
+import { readReviewedManifest } from "./reviewed-manifest";
 import type {
   CheckEvidence,
   ColumnEvidence,
@@ -186,7 +186,7 @@ export function refreshFixtureFingerprint(snapshot: ReconciliationSnapshot): voi
 export async function buildReconcileFixture(
   profile: CollationProfile = "production-normalized",
 ): Promise<ReconcileFixture> {
-  const manifest = await readRepositoryManifest(process.cwd());
+  const manifest = await readReviewedManifest();
   const policy = loadCollationPolicy(profile);
   const schema = buildSchemaEvidence(migrationContracts, policy);
   const snapshot: ReconciliationSnapshot = {

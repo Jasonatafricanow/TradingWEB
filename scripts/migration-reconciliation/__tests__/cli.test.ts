@@ -6,6 +6,7 @@ import { spawn, execFileSync } from "node:child_process";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { MigrationReconciliationError } from "../errors";
+import { withReviewedRepository } from "./reviewed-manifest";
 import { runCli } from "../cli";
 import {
   buildReconcileFixture,
@@ -87,6 +88,14 @@ async function spawnCli(
   });
 }
 
+async function runReviewedCli(args: string[]) {
+  return withReviewedRepository(async repositoryRoot => {
+    let stdout = ""; let stderr = "";
+    const exitCode = await runCli(args, { repositoryRoot, repositoryCommit: async () => currentRepositoryHead(), stdout: message => { stdout += message; }, stderr: message => { stderr += message; } });
+    return { exitCode, stdout, stderr };
+  });
+}
+
 async function writeSnapshot(
   path: string,
   snapshot: Awaited<ReturnType<typeof buildReconcileFixture>>["snapshot"],
@@ -138,7 +147,7 @@ describe("migration reconciliation CLI boundaries", () => {
     const output = join(parent, "blocked-output");
     await writeSnapshot(snapshotPath, fixture.snapshot);
 
-    const result = await spawnCli([
+    const result = await runReviewedCli([
       "reconcile",
       "--snapshot",
       snapshotPath,
@@ -161,7 +170,7 @@ describe("migration reconciliation CLI boundaries", () => {
     const output = join(parent, "eligible-output");
     await writeSnapshot(snapshotPath, fixture.snapshot);
 
-    const result = await spawnCli([
+    const result = await runReviewedCli([
       "reconcile",
       "--snapshot",
       snapshotPath,
@@ -181,7 +190,7 @@ describe("migration reconciliation CLI boundaries", () => {
     const output = join(parent, "exact-output");
     await writeSnapshot(snapshotPath, fixture.snapshot);
 
-    const result = await spawnCli([
+    const result = await runReviewedCli([
       "reconcile",
       "--snapshot",
       snapshotPath,
@@ -202,7 +211,7 @@ describe("migration reconciliation CLI boundaries", () => {
     const output = join(parent, "mismatch-output");
     await writeSnapshot(snapshotPath, fixture.snapshot);
 
-    const result = await spawnCli([
+    const result = await runReviewedCli([
       "reconcile",
       "--snapshot",
       snapshotPath,

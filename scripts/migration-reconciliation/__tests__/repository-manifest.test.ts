@@ -13,6 +13,7 @@ import {
   type DisposableAdminConnection,
   withDisposableForeignKeyChecksDisabled,
 } from "../integration/disposable-db";
+import { readReviewedManifest } from "./reviewed-manifest";
 import { readRepositoryManifest } from "../repository-manifest";
 
 describe("disposable integration database gate", () => {
@@ -221,8 +222,11 @@ async function createRepository(
 }
 
 describe("readRepositoryManifest", () => {
+  it("keeps the historical repair tool blocked on newer application migrations", async () => {
+    await expect(readRepositoryManifest(process.cwd())).rejects.toThrow("Unexpected migration after reviewed boundary: 0034_oauth_identities");
+  });
   it("returns the exact 0025 anchor and ordered 0026-0033 targets", async () => {
-    const manifest = await readRepositoryManifest(process.cwd());
+    const manifest = await readReviewedManifest();
 
     expect(manifest.map(({ id, idx, tag, when, role }) => ({
       id,
@@ -238,7 +242,7 @@ describe("readRepositoryManifest", () => {
 
   it("matches the installed Drizzle reader hashes for real files", async () => {
     const root = process.cwd();
-    const manifest = await readRepositoryManifest(root);
+    const manifest = await readReviewedManifest();
     const drizzleMigrations = readMigrationFiles({
       migrationsFolder: resolve(root, "drizzle"),
     });

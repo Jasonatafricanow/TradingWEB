@@ -25,6 +25,14 @@ export const users = mysqlTable(
 	]
 );
 
+export const oauthIdentities = mysqlTable("oauth_identities", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  user_id: varchar("user_id", { length: 36 }).notNull().references(() => users.id),
+  provider: varchar("provider", { length: 20 }).notNull(),
+  subject: varchar("subject", { length: 255 }).notNull(),
+  created_at: timestamp("created_at").defaultNow().notNull(),
+}, table => [uniqueIndex("oauth_provider_subject_unique").on(table.provider, table.subject), index("oauth_user_idx").on(table.user_id)]);
+
 // ==================== 鍟嗗搧鍒嗙被锛堟爲褰級 ====================
 export const categories = mysqlTable(
 	"categories",
@@ -1330,3 +1338,18 @@ export const posIdempotencyKeys = mysqlTable(
 		index("pos_idempotency_status_idx").on(table.status),
 	]
 );
+
+export const orderStockAllocations = mysqlTable("order_stock_allocations", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  order_id: varchar("order_id", { length: 36 }).notNull(),
+  inventory_id: varchar("inventory_id", { length: 36 }).notNull(),
+  product_id: varchar("product_id", { length: 36 }).notNull(),
+  variant_id: varchar("variant_id", { length: 36 }),
+  quantity: int("quantity").notNull(),
+  restored_quantity: int("restored_quantity").notNull().default(0),
+}, table => [index("stock_allocation_order_idx").on(table.order_id)]);
+
+export const revokedSessions = mysqlTable("revoked_sessions", {
+  token_hash: char("token_hash", { length: 64 }).primaryKey(),
+  expires_at: timestamp("expires_at").notNull(),
+}, table => [index("revoked_sessions_expiry_idx").on(table.expires_at)]);
