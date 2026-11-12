@@ -157,7 +157,7 @@ export default function AdminCustomersPage() {
                 const link = document.createElement("a");
                 link.href = url; link.download = "customers-vip.csv"; link.click();
                 setTimeout(() => URL.revokeObjectURL(url), 60000);
-              } catch { toast.error("Export failed"); }
+              } catch { toast.error(t("admin.customers.export_failed")); }
             }}>
               <Crown className="h-4 w-4 mr-1" /> 导出 VIP
             </Button>

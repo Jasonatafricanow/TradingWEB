@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { API_MESSAGES } from "@/lib/api-messages";
 import { NextRequest, NextResponse } from "next/server"
 import { requireUser, requireStaffRole, errorResponse } from "@/services/auth/auth-middleware"
 
@@ -15,7 +16,7 @@ export async function POST(
     const { id } = await params
     const [rows] = await db.$client.execute("SELECT recipient, subject, body FROM email_logs WHERE id = ? LIMIT 1", [id]);
     const original = (rows as Array<{ recipient: string; subject: string; body: string }>)[0];
-    if (!original) return NextResponse.json({ error: "Email log not found" }, { status: 404 });
+    if (!original) return NextResponse.json({ error: API_MESSAGES.emailLogNotFound }, { status: 404 });
     const result = await sendEmail(original.recipient, original.subject, original.body)
 
     

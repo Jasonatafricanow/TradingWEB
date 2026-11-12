@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { requireUser, errorResponse } from "@/services/auth/auth-middleware";
 import { listUserOrders, createOrder } from "@/services/orders/order-service";
 import { db } from "@/lib/db";
+import { API_MESSAGES } from "@/lib/api-messages";
 
 export async function GET(request: Request) {
   try {
@@ -98,7 +99,7 @@ export async function POST(request: Request) {
       delivery_time_slot: body.delivery_time_slot,
     };
     const requestKey = request.headers.get("Idempotency-Key");
-    if (requestKey && !/^[a-zA-Z0-9_-]{8,100}$/.test(requestKey)) return NextResponse.json({ error: "Invalid idempotency key" }, { status: 400 });
+    if (requestKey && !/^[a-zA-Z0-9_-]{8,100}$/.test(requestKey)) return NextResponse.json({ error: API_MESSAGES.invalidIdempotencyKey }, { status: 400 });
     const result = requestKey ? await runIdempotent({
       key: `web:${createHash("sha256").update(`${user.id}:${requestKey}`).digest("hex")}`,
       operation: "web_checkout", storeId: null, requestHash: hashPosRequest(input),

@@ -137,7 +137,7 @@ export default function AccountPage() {
     }
   }
 
-  if (authLoading) return <div role="status" className="p-8">Loading…</div>;
+  if (authLoading) return <div role="status" className="p-8">{t("account.loading")}</div>;
   if (!user) return null;
 
   const copyToClipboard = (code: string) => {
@@ -157,11 +157,11 @@ export default function AccountPage() {
       <div className="mt-8 space-y-6">
         {/* Profile Card */}
         {(process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || process.env.NEXT_PUBLIC_APPLE_CLIENT_ID) && <Card>
-          <CardHeader><CardTitle>关联登录方式</CardTitle></CardHeader>
+          <CardHeader><CardTitle>{t("account.linked_logins_title")}</CardTitle></CardHeader>
           <CardContent className="space-y-3">
-            <p className="text-sm text-muted-foreground">验证 Google 或 Apple 身份后，将其关联到当前已登录账户。</p>
-            <GoogleLoginButton link onSuccess={() => toast.success("Google 登录已关联")} />
-            <AppleLoginButton link onSuccess={() => toast.success("Apple 登录已关联")} />
+            <p className="text-sm text-muted-foreground">{t("account.linked_logins_desc")}</p>
+            <GoogleLoginButton link onSuccess={() => toast.success(t("account.google_linked"))} />
+            <AppleLoginButton link onSuccess={() => toast.success(t("account.apple_linked"))} />
           </CardContent>
         </Card>}
         <Card>

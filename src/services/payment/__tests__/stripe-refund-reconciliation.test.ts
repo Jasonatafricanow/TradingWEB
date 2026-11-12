@@ -1,12 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-const mocks = vi.hoisted(() => ({ charge: vi.fn(), intent: vi.fn(), session: vi.fn(), transaction: vi.fn(), update: vi.fn(), insert: vi.fn() }));
+const mocks = vi.hoisted(() => ({ charge: vi.fn(), intent: vi.fn(), session: vi.fn(), transaction: vi.fn(), select: vi.fn(), update: vi.fn(), insert: vi.fn() }));
 vi.mock("stripe", () => ({ default: class { charges = { retrieve: mocks.charge }; paymentIntents = { retrieve: mocks.intent }; checkout = { sessions: { retrieve: mocks.session } }; } }));
-vi.mock("@/lib/db", () => ({ db: { transaction: mocks.transaction } }));
+vi.mock("@/lib/db", () => ({ db: { transaction: mocks.transaction, select: mocks.select } }));
 import { reconcileStripeChargeRefund } from "../stripe-refund-reconciliation";
+let inTransaction = false;
 function setup(refunded = "0.00") {
   const order = { id: "o", payment_method: "stripe", payment_id: "cs_1", currency: "EUR", total_amount: "20.00", refunded_total: refunded };
   const tx = { select: () => ({ from: () => ({ where: () => ({ for: () => ({ limit: async () => [order] }) }) }) }), update: () => ({ set: (value: unknown) => { mocks.update(value); return { where: async () => {} }; } }), insert: () => ({ values: mocks.insert }) };
-  mocks.transaction.mockImplementation(work => work(tx));
+  mocks.select.mockReturnValue({ from: () => ({ where: () => ({ limit: async () => [{ payment_id: order.payment_id }] }) }) });
+  mocks.transaction.mockImplementation(work => { inTransaction = true; return Promise.resolve(work(tx)).finally(() => { inTransaction = false; }); });
 }
 beforeEach(() => {
   vi.clearAllMocks(); process.env.STRIPE_SECRET_KEY = "test";
@@ -32,5 +34,10 @@ describe("Stripe cumulative refund events", () => {
     setup(); mocks.session.mockResolvedValueOnce({ payment_intent: "pi_other" });
     await expect(reconcileStripeChargeRefund("ch_1")).rejects.toThrow("mismatch");
     expect(mocks.update).not.toHaveBeenCalled();
+  });
+  it("resolves the checkout session before taking the order row lock", async () => {
+    setup(); mocks.session.mockImplementationOnce(async () => { expect(inTransaction).toBe(false); return { payment_intent: "pi_1" }; });
+    await reconcileStripeChargeRefund("ch_1");
+    expect(mocks.session).toHaveBeenCalledTimes(1);
   });
 });

@@ -21,6 +21,7 @@ import { enqueuePosAuditEvent, type EnqueuePosAuditEvent } from './pos-audit-out
 import { findOpenShiftId } from './pos-shift-service';
 import { restoreInventory } from '@/services/inventory/inventory-allocation-service';
 import { RefundStatus, isRefundStatus } from '@/lib/enums';
+import { TIMELINE_MESSAGES } from "@/lib/api-messages";
 
 function withOrder(row: Record<string, unknown>) {
   return {
@@ -265,7 +266,7 @@ export async function restockWebRefund(id: string, userId: string, returnItems: 
       await tx.insert(posRefundItems).values({ id: randomUUID(), refund_id: id, order_item_id: item.id, quantity: line.quantity, restock: true });
     }
     await tx.update(refunds).set({ restocked: true, ...(refund.status === "approved" ? { status: "returned" } : {}) }).where(eq(refunds.id, id));
-    await tx.insert(orderTimeline).values({ id: randomUUID(), order_id: order.id, action: "return_restocked", description: `Refund ${id}: verified return lines restored to original stock locations`, operator_id: userId });
+    await tx.insert(orderTimeline).values({ id: randomUUID(), order_id: order.id, action: "return_restocked", description: TIMELINE_MESSAGES.webReturnRestocked(id), operator_id: userId });
     return { ...refund, restocked: true };
   });
 }

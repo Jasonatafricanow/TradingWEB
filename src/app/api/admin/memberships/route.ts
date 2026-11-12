@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { requireUser, requireStaffRole, errorResponse } from "@/services/auth/auth-middleware"
 import { listTiers, updateTier, createTier } from "@/services/admin/membership-service"
+import { API_MESSAGES } from "@/lib/api-messages";
 
 // GET /api/admin/memberships — 等级列表
 export async function GET(request: NextRequest) {
@@ -36,7 +37,7 @@ export async function POST(request: NextRequest) {
     if (typeof body.name !== "string" || !body.name.trim() || !Number.isInteger(body.level) || body.level <= 0
       || !Number.isFinite(Number(body.min_total_spent)) || Number(body.min_total_spent) < 0
       || !Number.isFinite(Number(body.discount_percent)) || Number(body.discount_percent) < 0 || Number(body.discount_percent) > 100) {
-      return NextResponse.json({ error: "Invalid membership tier" }, { status: 400 });
+      return NextResponse.json({ error: API_MESSAGES.invalidMembershipTier }, { status: 400 });
     }
     const data = await createTier({ name: body.name.trim(), level: body.level,
       min_total_spent: Number(body.min_total_spent).toFixed(2), discount_percent: Number(body.discount_percent).toFixed(2),

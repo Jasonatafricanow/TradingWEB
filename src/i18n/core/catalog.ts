@@ -3,15 +3,18 @@ import type { Locale } from "./locale";
 import { reportMissingTranslation } from "./missing-key";
 import { enShell } from "../locales/en/shell";
 import { enSales } from "../locales/en/sales";
+import { enOps } from "../locales/en/ops";
 import { ptShell } from "../locales/pt/shell";
 import { ptSales } from "../locales/pt/sales";
+import { ptOps } from "../locales/pt/ops";
 import { zhShell } from "../locales/zh/shell";
 import { zhSales } from "../locales/zh/sales";
+import { zhOps } from "../locales/zh/ops";
 
 export const shellCatalogs = {
-  zh: { ...zhShell, ...zhSales },
-  en: { ...enShell, ...enSales },
-  pt: { ...ptShell, ...ptSales },
+  zh: { ...zhShell, ...zhSales, ...zhOps },
+  en: { ...enShell, ...enSales, ...enOps },
+  pt: { ...ptShell, ...ptSales, ...ptOps },
 } as const;
 
 export type TranslationKey = keyof typeof shellCatalogs.en;
