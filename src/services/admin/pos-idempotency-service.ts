@@ -1,3 +1,5 @@
+import { AsyncLocalStorage } from "node:async_hooks";
+import type { DbTx } from "@/services/orders/order-pricing-service";
 /**
  * POS 幂等键服务
  *
@@ -5,17 +7,25 @@
  * 1. 先尝试 INSERT processing 占位
  * 2. 捕获 ER_DUP_ENTRY → 查询已有记录按规则处理
  * 3. 首次插入成功 → 执行 work，成功后 UPDATE completed
- * 4. work 失败 → fail-closed，保留 processing 占位
+ * 4. 业务写入、响应及占位同事务提交；失败整体回滚。历史 processing 记录不盲删。
  */
 import { db } from "@/lib/db";
 import { posIdempotencyKeys } from "@/storage/database/shared/schema";
 import { eq } from "drizzle-orm";
 
+// Every production POS transaction joins the idempotency transaction, so the
+// result and business ledger commit together. Historical processing rows stay closed.
+const transactionContext = new AsyncLocalStorage<DbTx>();
+export function posTransaction<T>(work: (tx: DbTx) => Promise<T>): Promise<T> {
+  const current = transactionContext.getStore();
+  return current ? work(current) : db.transaction(work);
+}
+
 // ==================== 类型定义 ====================
 
 export interface IdempotencyInput {
   key: string;
-  operation: "checkout" | "refund" | "exchange" | "stock_adjust" | "inventory_transfer" | "purchase_create" | "receive" | "shift_close";
+  operation: "web_checkout" | "checkout" | "refund" | "exchange" | "stock_adjust" | "inventory_transfer" | "purchase_create" | "receive" | "shift_close";
   storeId: string | null;
   requestHash: string;
 }
@@ -73,18 +83,26 @@ export async function runIdempotent<T>(
   work: () => Promise<T>,
   completion: IdempotencyCompletion<T> = {},
 ): Promise<T> {
-  // 第一步：尝试 INSERT processing 占位
+  let reserved = false;
   try {
-    await db.insert(posIdempotencyKeys).values({
-      idempotency_key: input.key,
-      operation: input.operation,
-      store_id: input.storeId,
-      request_hash: input.requestHash,
-      status: "processing",
+    return await db.transaction(async tx => {
+      await tx.insert(posIdempotencyKeys).values({
+        idempotency_key: input.key, operation: input.operation, store_id: input.storeId,
+        request_hash: input.requestHash, status: "processing",
+      });
+      reserved = true;
+      const result = await transactionContext.run(tx, work);
+      const resourceId = typeof completion.resourceId === "function" ? completion.resourceId(result) : completion.resourceId;
+      await tx.update(posIdempotencyKeys).set({ status: "completed", response_status: completion.responseStatus ?? 200,
+        response_body: result as unknown as Record<string, unknown>,
+        ...(completion.resourceType !== undefined ? { resource_type: completion.resourceType } : {}),
+        ...(resourceId !== undefined ? { resource_id: resourceId } : {}),
+      }).where(eq(posIdempotencyKeys.idempotency_key, input.key));
+      return result;
     });
   } catch (err: unknown) {
     // 检查是否为 duplicate key 错误
-    if (isDuplicateKeyError(err)) {
+    if (!reserved && isDuplicateKeyError(err)) {
       // 重新读取已有记录
       const rows = await db.select()
         .from(posIdempotencyKeys)
@@ -142,22 +160,4 @@ export async function runIdempotent<T>(
     throw err;
   }
 
-  // INSERT 成功后，work 和完成更新均位于 duplicate-key catch 之外。
-  // 任一阶段失败都原样透传，并保留 processing 占位（fail-closed）。
-  const result = await work();
-  const resourceId = typeof completion.resourceId === "function"
-    ? completion.resourceId(result)
-    : completion.resourceId;
-
-  await db.update(posIdempotencyKeys)
-    .set({
-      status: "completed",
-      response_status: completion.responseStatus ?? 200,
-      response_body: result as unknown as Record<string, unknown>,
-      ...(completion.resourceType !== undefined ? { resource_type: completion.resourceType } : {}),
-      ...(resourceId !== undefined ? { resource_id: resourceId } : {}),
-    })
-    .where(eq(posIdempotencyKeys.idempotency_key, input.key));
-
-  return result;
 }

@@ -1,3 +1,4 @@
+import { posTransaction } from "./pos-idempotency-service";
 import { db } from '@/lib/db';
 import { and, eq, isNull, or } from 'drizzle-orm';
 import {
@@ -494,7 +495,7 @@ function isDuplicateKeyError(error: unknown): boolean {
 }
 
 const databasePosInventoryDependencies: PosInventoryDependencies = {
-  transaction: (work) => db.transaction(work),
+  transaction: (work) => posTransaction(work),
   runIdempotent,
   async getStoreLocation(storeId, tx) {
     const query = (tx ?? db).select({
@@ -739,6 +740,7 @@ export async function adjustPosInventory(
     const approvedBy = await dependencies.consumeApprovalToken(
       input.approval_token!, 'inventory_adjustment', resourceHash, input.store_id, tx,
     );
+    if (approvedBy === input.operator.staffId) throw new PosApiError('INDEPENDENT_APPROVER_REQUIRED', 'Approval must be issued by another authorized staff member', 403);
     const target = {
       productId: input.product_id,
       variantId: input.variant_id,

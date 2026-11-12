@@ -1,3 +1,4 @@
+import { posTransaction } from "./pos-idempotency-service";
 import { randomUUID } from "node:crypto";
 
 import { and, eq } from "drizzle-orm";
@@ -120,7 +121,7 @@ export function reconcileCashEntries(input: {
 }
 
 const databaseShiftDependencies: PosShiftDependencies = {
-  transaction: (work) => db.transaction(work),
+  transaction: (work) => posTransaction(work),
   runIdempotent,
   async lockStore(storeId, tx) {
     const [store] = await tx.select({ id: stores.id, status: stores.status }).from(stores)

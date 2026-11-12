@@ -10,12 +10,13 @@
  * - work 失败保留 processing 占位
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { runIdempotent, PosIdempotencyError, type IdempotencyInput } from "../pos-idempotency-service";
+import { posTransaction, runIdempotent, PosIdempotencyError, type IdempotencyInput } from "../pos-idempotency-service";
 
 // ---- Mock 数据库模块 ----
 // vi.hoisted 确保在 vi.mock 提升前执行
 const { mockDb } = vi.hoisted(() => ({
   mockDb: {
+    transaction: vi.fn(),
     insert: vi.fn(),
     select: vi.fn(),
     update: vi.fn(),
@@ -105,6 +106,7 @@ function makeDrizzleDuplicateQueryError(): Error {
 }
 
 beforeEach(() => {
+  mockDb.transaction.mockImplementation(async work => work(mockDb));
   vi.clearAllMocks();
 });
 
@@ -367,4 +369,28 @@ describe("runIdempotent", () => {
     const result = await runIdempotent(makeInput({ storeId: null }), vi.fn());
     expect(result).toEqual({ orderId: "order-999", total: 49.99 });
   });
+});
+
+it("joins nested business writes and completion in one transaction", async () => {
+  mockDb.insert.mockReturnValue(makeInsertChain());
+  mockDb.update.mockReturnValue(makeUpdateChain());
+  await runIdempotent(makeInput(), () => posTransaction(async tx => {
+    expect(tx).toBe(mockDb);
+    expect(mockDb.update).not.toHaveBeenCalled();
+    return { id: "atomic-order" };
+  }));
+  expect(mockDb.transaction).toHaveBeenCalledTimes(1);
+  expect(mockDb.update).toHaveBeenCalledTimes(1);
+});
+
+it("rejects the outer transaction when response persistence fails", async () => {
+  mockDb.insert.mockReturnValue(makeInsertChain());
+  const failure = new Error("response write failed");
+  mockDb.update.mockReturnValue({ set: () => ({ where: async () => { throw failure; } }) });
+  let rolledBack = false;
+  mockDb.transaction.mockImplementation(async work => {
+    try { return await work(mockDb); } catch (error) { rolledBack = true; throw error; }
+  });
+  await expect(runIdempotent(makeInput(), async () => ({ id: "order" }))).rejects.toBe(failure);
+  expect(rolledBack).toBe(true);
 });

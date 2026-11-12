@@ -1,3 +1,4 @@
+import { posTransaction } from "./pos-idempotency-service";
 import { randomUUID } from "node:crypto";
 
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
@@ -157,7 +158,7 @@ function inventoryCondition(target: {
 }
 
 const databasePurchaseDependencies: PosPurchaseDependencies = {
-  transaction: (work) => db.transaction(work),
+  transaction: (work) => posTransaction(work),
   runIdempotent,
   consumeApprovalToken,
   async getStoreLocation(storeId, tx) {
@@ -451,6 +452,7 @@ export async function receivePosPurchaseOrder(
     requestHash,
   }, () => dependencies.transaction(async (tx) => {
     const approvedBy = await dependencies.consumeApprovalToken(input.approval_token!, "receive", requestHash, input.store_id, tx);
+    if (approvedBy === input.operator.staffId) throw new PosApiError('INDEPENDENT_APPROVER_REQUIRED', 'Approval must be issued by another authorized staff member', 403);
     const order = await dependencies.lockOrder(input.purchase_order_id, tx);
     if (!order || order.storeId !== input.operator.storeId) {
       throw new PosApiError("PURCHASE_ORDER_NOT_FOUND", "Purchase order not found", 404);

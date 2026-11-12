@@ -1,3 +1,4 @@
+import { posTransaction } from "./pos-idempotency-service";
 import { randomUUID } from 'node:crypto';
 
 import { asc, eq } from 'drizzle-orm';
@@ -89,7 +90,7 @@ function preview(priced: PricedOrder) {
 const databaseExchangeDependencies: PosExchangeDependencies = {
   ...databasePosReturnDependencies,
   runIdempotent,
-  transaction: (work) => db.transaction(work),
+  transaction: (work) => posTransaction(work),
   async getStore(storeId) {
     const [store] = await db.select({ id: stores.id, name: stores.name, status: stores.status, metadata: stores.metadata })
       .from(stores).where(eq(stores.id, storeId)).limit(1);
@@ -266,6 +267,7 @@ export async function exchangePosOrder(
     requestHash: resourceHash,
   }, () => dependencies.transaction(async (tx) => {
     const approvedBy = await dependencies.consumeApprovalToken(input.approval_token!, 'exchange', resourceHash, input.store_id, tx);
+    if (approvedBy === input.operator.staffId) throw new PosApiError('INDEPENDENT_APPROVER_REQUIRED', 'Approval must be issued by another authorized staff member', 403);
     const shiftId = await dependencies.findOpenShiftId(input.store_id, tx);
     const prepared = await preparePosReturn({
       orderId: input.original_order_id,

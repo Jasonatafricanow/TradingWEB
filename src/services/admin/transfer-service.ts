@@ -1,3 +1,4 @@
+import { posTransaction } from "./pos-idempotency-service";
 import { randomUUID } from "node:crypto";
 
 import { and, eq, isNull } from "drizzle-orm";
@@ -126,7 +127,7 @@ function toHeader(row: typeof stockTransfers.$inferSelect): TransferHeader {
 }
 
 const databaseTransferDependencies: TransferDependencies = {
-  transaction: (work) => db.transaction(work),
+  transaction: (work) => posTransaction(work),
   async validateWarehouse(warehouseId, tx) {
     const [row] = await tx.select({ id: warehouses.id }).from(warehouses).where(and(
       eq(warehouses.id, warehouseId),
