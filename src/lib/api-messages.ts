@@ -16,6 +16,16 @@ export const API_MESSAGES = {
   paypalCaptureUnavailable: "PayPal capture verification unavailable",
   refundReconciliationPending: "Refund reconciliation pending",
   legacyPosRetired: "Legacy POS checkout retired; use /api/admin/pos/checkout",
+  adminAccountsAdminOnly: "Only an admin can create, change or remove admin accounts",
+  invalidRolePermissions: "Invalid role permissions",
+  invalidProgramSettings: "Invalid program settings",
+  invalidWalletCredit: "Invalid wallet credit",
+  walletCreditNotFound: "Wallet credit not found",
+  userNotFound: "User not found",
+  invalidMembershipAssignment: "Invalid membership assignment",
+  invalidAffiliateCommission: "Invalid affiliate commission settings",
+  commissionMaturityFailed: "Commission maturity run failed",
+  walletUnavailable: "Wallet balance changed; review your order before retrying",
 } as const;
 
 export const IMPORT_MESSAGES = {

@@ -3,6 +3,7 @@ import { requireUser, requireStaffRole, errorResponse } from "@/services/auth/au
 import { getStaffById, updateStaff, deleteStaff, type StaffUpdate } from "@/services/admin/staff-service"
 import { getStore } from "@/services/admin/store-service"
 import { logActionSafely } from "@/services/admin/audit-service"
+import { API_MESSAGES } from "@/lib/api-messages"
 
 const ALLOWED_ROLES = new Set(["admin", "manager", "operator", "support"])
 const POS_PERMISSIONS = new Set([
@@ -83,6 +84,10 @@ export async function PUT(
       return NextResponse.json({ error: "No valid fields to update" }, { status: 400 })
     }
 
+    if (user.role !== "admin" && (target.role === "admin" || update.role === "admin")) {
+      return NextResponse.json({ error: API_MESSAGES.adminAccountsAdminOnly }, { status: 403 })
+    }
+
     if (isSelfTarget(target, user) && (update.role || update.is_active === false)) {
       return NextResponse.json({ error: "Cannot change your own role or deactivate yourself" }, { status: 400 })
     }
@@ -132,6 +137,10 @@ export async function DELETE(
     const { id } = await params
     const target = await getStaffById(id)
     if (!target) return NextResponse.json({ error: "Staff not found" }, { status: 404 })
+
+    if (user.role !== "admin" && target.role === "admin") {
+      return NextResponse.json({ error: API_MESSAGES.adminAccountsAdminOnly }, { status: 403 })
+    }
 
     if (isSelfTarget(target, user)) {
       return NextResponse.json({ error: "Cannot delete your own staff account" }, { status: 400 })

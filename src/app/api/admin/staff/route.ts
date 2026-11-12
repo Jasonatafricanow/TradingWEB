@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { requireStaffRole, requireUser, errorResponse } from "@/services/auth/auth-middleware"
 import { logActionSafely } from "@/services/admin/audit-service"
 import { listStaff, createStaff } from "@/services/admin/staff-service"
+import { API_MESSAGES } from "@/lib/api-messages"
 
 const ALLOWED_ROLES = new Set(["admin", "operator", "support"])
 
@@ -30,6 +31,11 @@ export async function POST(request: NextRequest) {
     const normalizedUserId = typeof user_id === "string" && user_id.trim()
       ? user_id.trim().slice(0, 36)
       : undefined
+
+    // A manager granted the staff section manages non-admin staff only.
+    if (normalizedRole === "admin" && actor.role !== "admin") {
+      return NextResponse.json({ error: API_MESSAGES.adminAccountsAdminOnly }, { status: 403 })
+    }
 
     if (!normalizedName || !normalizedEmail || !normalizedEmail.includes("@")) {
       return NextResponse.json({ error: "name and email are required" }, { status: 400 })

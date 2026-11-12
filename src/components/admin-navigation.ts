@@ -10,6 +10,9 @@ import {
   Database,
   Envelope,
   Gear,
+  Gift,
+  Key,
+  Wallet,
   GitBranch,
   Image,
   Lightbulb,
@@ -89,6 +92,7 @@ export const ADMIN_NAV_GROUPS = [
     items: [
       { id: "customers", labelKey: "nav.customers", href: "/admin/customers", icon: UserCircle },
       { id: "memberships", labelKey: "nav.memberships", href: "/admin/memberships", icon: Crown },
+      { id: "wallets", labelKey: "nav.wallets", href: "/admin/wallets", icon: Wallet },
     ],
   },
   {
@@ -98,6 +102,7 @@ export const ADMIN_NAV_GROUPS = [
       { id: "coupons", labelKey: "nav.coupons", href: "/admin/coupons", icon: Tag },
       { id: "affiliates", labelKey: "nav.affiliates", href: "/admin/affiliates", icon: ShareNetwork },
       { id: "notifications", labelKey: "nav.notifications", href: "/admin/notifications", icon: Bell },
+      { id: "promotions", labelKey: "nav.promotions", href: "/admin/promotions", icon: Gift },
     ],
   },
   {
@@ -127,6 +132,7 @@ export const ADMIN_NAV_GROUPS = [
     labelKey: "nav.group.governance",
     items: [
       { id: "staff", labelKey: "nav.staff", href: "/admin/staff", icon: Users },
+      { id: "role-permissions", labelKey: "nav.role_permissions", href: "/admin/role-permissions", icon: Key },
       { id: "audit-logs", labelKey: "nav.audit_logs", href: "/admin/audit-logs", icon: ClipboardText },
       { id: "settings", labelKey: "nav.settings", href: "/admin/settings", icon: Gear },
       { id: "version", labelKey: "nav.version", href: "/admin/version", icon: GitBranch },
@@ -142,6 +148,7 @@ const ROLE_MENUS: Record<string, readonly string[]> = {
     "stores", "shipments", "shipping-templates", "customers", "reviews",
     "recommendations", "media", "seed", "briefing", "inventory", "staff",
     "settings", "imports", "redirects", "payment-methods", "version",
+    "wallets", "promotions", "role-permissions",
   ],
   operator: [
     "dashboard", "products", "orders", "pos", "categories", "sales", "traffic",
@@ -156,11 +163,13 @@ const ROLE_MENUS: Record<string, readonly string[]> = {
 export function filterNavigationForRole(
   groups: readonly AdminNavigationGroup[],
   role: string | null,
+  /** For a manager: the sections an admin granted (from /api/admin/staff/me). */
+  grantedSections?: readonly string[],
 ): AdminNavigationGroup[] {
   if (!role) {
     return groups.map((group) => ({ ...group, items: [...group.items] }));
   }
-  const roleMenus = ROLE_MENUS[role];
+  const roleMenus = role === "manager" ? grantedSections ?? [] : ROLE_MENUS[role];
   if (!roleMenus) return [];
   const allowed = new Set(roleMenus);
   return groups

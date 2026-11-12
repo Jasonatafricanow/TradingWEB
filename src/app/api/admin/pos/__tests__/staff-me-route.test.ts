@@ -16,6 +16,9 @@ vi.mock("@/services/auth/auth-middleware", () => ({
   errorResponse: vi.fn(),
 }));
 vi.mock("@/services/admin/staff-service", () => ({ listStaff: mocks.listStaff }));
+vi.mock("@/services/admin/role-permissions-service", () => ({
+  loadManagerGrant: vi.fn().mockResolvedValue({ all: false, sections: ["pos", "orders"] }),
+}));
 
 describe("current staff route", () => {
   it("allows the manager role used by POS operator sessions", async () => {
@@ -24,6 +27,7 @@ describe("current staff route", () => {
 
     expect(response.status).toBe(200);
     expect(mocks.requireStaffRole).toHaveBeenCalledWith(expect.anything(), ["admin", "manager", "operator", "support"]);
-    await expect(response.json()).resolves.toMatchObject({ data: { id: "manager-1", store_id: "store-1" } });
+    // The sidebar shows a manager exactly the sections an admin granted.
+    await expect(response.json()).resolves.toMatchObject({ data: { id: "manager-1", store_id: "store-1", sections: ["pos", "orders"] } });
   });
 });

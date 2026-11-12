@@ -47,11 +47,22 @@ export async function requireStaffRole(request: Request, allowedRoles: string[])
     if (user.staffId && user.role && allowedRoles.includes(user.role)) {
       return
     }
+    // Managers get the admin sections an admin granted them (role-permissions).
+    if (user.staffId && user.role === "manager" && await managerGrantCovers(request)) {
+      return
+    }
     throw new AuthError("Insufficient permissions", 403)
   } catch (err) {
     if (err instanceof AuthError) throw err
     throw new AuthError("Permission check failed", 403)
   }
+}
+
+async function managerGrantCovers(request: Request): Promise<boolean> {
+  const { managerMayUse } = await import("@/lib/admin-sections")
+  const { loadManagerGrant } = await import("@/services/admin/role-permissions-service")
+  const pathname = new URL(request.url).pathname
+  return managerMayUse(await loadManagerGrant(), pathname)
 }
 
 export function withAuth<T extends (...args: unknown[]) => Promise<Response>>(
