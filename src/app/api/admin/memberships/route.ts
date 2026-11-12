@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { requireUser, requireStaffRole, errorResponse } from "@/services/auth/auth-middleware"
-import { listTiers, updateTier, getUserMembership } from "@/services/admin/membership-service"
+import { listTiers, updateTier, createTier } from "@/services/admin/membership-service"
 
 // GET /api/admin/memberships — 等级列表
 export async function GET(request: NextRequest) {
@@ -27,4 +27,20 @@ export async function PUT(request: NextRequest) {
   } catch (err) {
     return errorResponse(err)
   }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    await requireStaffRole(request, ["admin", "operator"]);
+    const body = await request.json();
+    if (typeof body.name !== "string" || !body.name.trim() || !Number.isInteger(body.level) || body.level <= 0
+      || !Number.isFinite(Number(body.min_total_spent)) || Number(body.min_total_spent) < 0
+      || !Number.isFinite(Number(body.discount_percent)) || Number(body.discount_percent) < 0 || Number(body.discount_percent) > 100) {
+      return NextResponse.json({ error: "Invalid membership tier" }, { status: 400 });
+    }
+    const data = await createTier({ name: body.name.trim(), level: body.level,
+      min_total_spent: Number(body.min_total_spent).toFixed(2), discount_percent: Number(body.discount_percent).toFixed(2),
+      benefits: typeof body.benefits === "string" ? body.benefits : undefined, is_active: true });
+    return NextResponse.json({ data }, { status: 201 });
+  } catch (err) { return errorResponse(err); }
 }

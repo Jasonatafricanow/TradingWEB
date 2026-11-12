@@ -174,7 +174,10 @@ export async function listAdminProducts(options: AdminProductFilters = {}) {
       where.push(viewCondition);
     }
     const whereSql = where.length ? ` WHERE ${where.join(" AND ")}` : "";
-    const viewCounts = await getProductViewCounts();
+    const viewCounts = await getProductViewCounts().catch(error => {
+      console.error("[products] View statistics unavailable", error);
+      return null;
+    });
 
     const [countRows] = await db.$client.execute(
       `SELECT COUNT(*) as total FROM products p${whereSql}`,

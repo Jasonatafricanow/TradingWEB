@@ -184,7 +184,7 @@ export default function AdminStaffPage() {
       if (securityChanged && !window.confirm("修改 POS 安全配置会立即注销该员工现有的收银会话。是否继续？")) return
       const res = await apiFetch(`/api/admin/staff/${editingStaff.id}`, {
         method: "PUT",
-        body: JSON.stringify({ name: editName, role: editRole, phone: editPhone, ...posUpdate }),
+        body: JSON.stringify({ name: editName, email: editEmail, role: editRole, phone: editPhone, ...posUpdate }),
       })
       if (!res.ok) {
         const err = await res.json()

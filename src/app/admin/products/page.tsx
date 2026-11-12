@@ -281,6 +281,10 @@ export default function AdminProductsPage() {
   const [productTypes, setProductTypes] = useState<ApiProductType[]>([]);
   const [search, setSearch] = useState("");
   const [productView, setProductView] = useState<ProductViewKey>("all");
+  useEffect(() => {
+    const view = new URLSearchParams(window.location.search).get("view");
+    if (view && Object.prototype.hasOwnProperty.call(DEFAULT_VIEW_COUNTS, view)) setProductView(view as ProductViewKey);
+  }, []);
   const [viewCounts, setViewCounts] = useState<ProductViewCounts>(DEFAULT_VIEW_COUNTS);
   const [typeFilter, setTypeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");

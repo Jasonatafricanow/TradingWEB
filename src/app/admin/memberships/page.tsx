@@ -1,5 +1,6 @@
 "use client"
 
+import { apiFetch } from "@/lib/client-api"
 import { useEffect, useState } from "react"
 import { useI18n } from "@/contexts/i18n-context"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -38,7 +39,7 @@ export default function AdminMembershipsPage() {
 
   const loadTiers = async () => {
     try {
-      const res = await fetch("/api/admin/memberships")
+      const res = await apiFetch("/api/admin/memberships")
       const json = await res.json()
       setTiers(json.data || [])
       // init edit values
@@ -69,7 +70,7 @@ export default function AdminMembershipsPage() {
     if (isNaN(level) || level <= 0) return toast.error("等级必须为正整数")
     setCreating(true)
     try {
-      const res = await fetch("/api/admin/memberships", {
+      const res = await apiFetch("/api/admin/memberships", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -91,7 +92,7 @@ export default function AdminMembershipsPage() {
   const handleSave = async (id: string) => {
     const val = editValues[id]
     try {
-      const res = await fetch("/api/admin/memberships", {
+      const res = await apiFetch("/api/admin/memberships", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(val),

@@ -149,7 +149,16 @@ export default function AdminCustomersPage() {
             <Button variant="outline" size="sm" onClick={load}>
               <ArrowsClockwise className="h-4 w-4 mr-1" /> {t("admin.refresh")}
             </Button>
-            <Button variant="outline" size="sm" onClick={() => window.open("/api/admin/customers/export?tier=vip", "_blank")}>
+            <Button variant="outline" size="sm" onClick={async () => {
+              try {
+                const res = await apiFetch("/api/admin/customers/export?tier=vip");
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const url = URL.createObjectURL(await res.blob());
+                const link = document.createElement("a");
+                link.href = url; link.download = "customers-vip.csv"; link.click();
+                setTimeout(() => URL.revokeObjectURL(url), 60000);
+              } catch { toast.error("Export failed"); }
+            }}>
               <Crown className="h-4 w-4 mr-1" /> 导出 VIP
             </Button>
             <Dialog open={createOpen} onOpenChange={setCreateOpen}>

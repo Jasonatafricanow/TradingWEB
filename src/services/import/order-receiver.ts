@@ -379,7 +379,7 @@ export async function receiveOrders(
   const productSourceIds = new Set<string>();
   const variantSourceIds = new Set<string>();
   for (const r of envelope.records) {
-    for (const li of r.line_items) {
+    for (const li of (Array.isArray(r.line_items) ? r.line_items : [])) {
       if (li.product_source_id) productSourceIds.add(li.product_source_id);
       if (li.variant_source_id) variantSourceIds.add(li.variant_source_id);
     }

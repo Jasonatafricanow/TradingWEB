@@ -1,4 +1,6 @@
 "use client"
+import { GoogleLoginButton, AppleLoginButton } from "@/components/auth/oauth-buttons";
+import { apiFetch } from "@/lib/client-api";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/auth-context";
@@ -50,7 +52,7 @@ interface AvailableCoupon {
 
 export default function AccountPage() {
   const router = useRouter();
-  const { user, getToken } = useAuth();
+  const { user, getToken, loading: authLoading } = useAuth();
   const { t, locale } = useI18n();
   const [name, setName] = useState("");
   const [renderedAt] = useState(() => Date.now());
@@ -61,6 +63,7 @@ export default function AccountPage() {
   const [loadingMembership, setLoadingMembership] = useState(true);
 
   useEffect(() => {
+    if (authLoading) return;
     if (!user) {
       router.push("/auth/login");
       return;
@@ -68,7 +71,7 @@ export default function AccountPage() {
     setName(user.name || "");
 
     // 加载会员信息 + 钱包 + 优惠券
-    fetch("/api/memberships/me")
+    apiFetch("/api/memberships/me")
       .then((r) => r.json())
       .then((j) => {
         setMembership(j.data?.membership || null);
@@ -80,7 +83,7 @@ export default function AccountPage() {
 
     // 加载地址
     fetchAddresses()
-  }, [user, router])
+  }, [user, router, authLoading])
 
   const [addresses, setAddresses] = useState<any[]>([])
   const [addrForm, setAddrForm] = useState({ label: "", phone: "", address_line1: "", address_line2: "", city: "", state: "", zip: "", country: "Moz", is_default: false })
@@ -88,7 +91,7 @@ export default function AccountPage() {
 
   async function fetchAddresses() {
     try {
-      const res = await fetch("/api/addresses")
+      const res = await apiFetch("/api/addresses")
       const json = await res.json()
       setAddresses(json.data || [])
     } catch {}
@@ -97,19 +100,20 @@ export default function AccountPage() {
   const saveAddress = async () => {
     if (!addrForm.address_line1 || !addrForm.city) return toast.error("请填写地址和城市")
     try {
-      await fetch("/api/addresses", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(addrForm) })
+      const res = await apiFetch("/api/addresses", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(addrForm) })
+      if (!res.ok) throw new Error("Address save failed");
       toast.success("地址已保存"); setAddrOpen(false); setAddrForm({ label: "", phone: "", address_line1: "", address_line2: "", city: "", state: "", zip: "", country: "Moz", is_default: false })
       fetchAddresses()
     } catch { toast.error("保存失败") }
   }
 
   const deleteAddress = async (id: string) => {
-    await fetch("/api/addresses", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) })
+    await apiFetch("/api/addresses", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) })
     fetchAddresses()
   }
 
   const setDefaultAddress = async (id: string) => {
-    await fetch("/api/addresses", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, is_default: true }) })
+    await apiFetch("/api/addresses", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, is_default: true }) })
     fetchAddresses()
   };
 
@@ -118,7 +122,7 @@ export default function AccountPage() {
     setSaving(true);
     try {
       const token = getToken();
-      const res = await fetch("/api/auth/me", {
+      const res = await apiFetch("/api/auth/me", {
         method: "PUT",
         headers: { "Content-Type": "application/json", "Authorization": token ? `Bearer ${token}` : "" },
         body: JSON.stringify({ name }),
@@ -133,6 +137,7 @@ export default function AccountPage() {
     }
   }
 
+  if (authLoading) return <div role="status" className="p-8">Loading…</div>;
   if (!user) return null;
 
   const copyToClipboard = (code: string) => {
@@ -151,6 +156,14 @@ export default function AccountPage() {
 
       <div className="mt-8 space-y-6">
         {/* Profile Card */}
+        {(process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || process.env.NEXT_PUBLIC_APPLE_CLIENT_ID) && <Card>
+          <CardHeader><CardTitle>关联登录方式</CardTitle></CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-muted-foreground">验证 Google 或 Apple 身份后，将其关联到当前已登录账户。</p>
+            <GoogleLoginButton link onSuccess={() => toast.success("Google 登录已关联")} />
+            <AppleLoginButton link onSuccess={() => toast.success("Apple 登录已关联")} />
+          </CardContent>
+        </Card>}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
