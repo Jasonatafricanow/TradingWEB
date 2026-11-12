@@ -1,3 +1,6 @@
+import { createHash } from "node:crypto";
+import { runIdempotent } from "@/services/admin/pos-idempotency-service";
+import { hashPosRequest } from "@/services/admin/pos-contracts";
 import { NextResponse } from "next/server";
 import { requireUser, errorResponse } from "@/services/auth/auth-middleware";
 import { listUserOrders, createOrder } from "@/services/orders/order-service";
@@ -80,7 +83,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid order item" }, { status: 400 });
     }
 
-    const result = await createOrder({
+    const input = {
       user_id: user.id,
       items: mappedItems,
       buyer_email: buyerEmail,
@@ -88,12 +91,18 @@ export async function POST(request: Request) {
       buyer_phone: buyerPhone,
       payment_method: paymentMethod,
       coupon_code: couponCode,
-      source: body.source,
+      source: body.source === "pos" ? "web" : body.source,
       delivery_zone_id: body.delivery_zone_id,
       shipping_cost: body.shipping_cost,
       delivery_date: body.delivery_date,
       delivery_time_slot: body.delivery_time_slot,
-    });
+    };
+    const requestKey = request.headers.get("Idempotency-Key");
+    if (requestKey && !/^[a-zA-Z0-9_-]{8,100}$/.test(requestKey)) return NextResponse.json({ error: "Invalid idempotency key" }, { status: 400 });
+    const result = requestKey ? await runIdempotent({
+      key: `web:${createHash("sha256").update(`${user.id}:${requestKey}`).digest("hex")}`,
+      operation: "web_checkout", storeId: null, requestHash: hashPosRequest(input),
+    }, () => createOrder(input), { resourceType: "order", resourceId: result => result.id }) : await createOrder(input);
     return NextResponse.json(result);
   } catch (err) {
     return errorResponse(err);

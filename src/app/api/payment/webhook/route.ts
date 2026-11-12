@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { PaymentProviderType } from "@/services/payment/payment-service";
 import type { PayPalProvider as PayPalProviderType } from "@/services/payment/paypal-provider";
-import { getOrder, updateOrder, markOrderPaidIfNotAlready } from "@/services/orders/order-service";
+import { getOrder, markOrderPaidIfNotAlready } from "@/services/orders/order-service";
 import { assertPaymentMatchesOrder } from "@/services/payment/payment-validation";
 
 // ── Stripe SDK (用于 constructEvent 签名验证) ──
@@ -208,10 +208,14 @@ export async function POST(request: NextRequest) {
     }
 
     if (eventType === "charge.refunded") {
-      const meta = data.metadata as Record<string, unknown> | undefined;
-      const orderId = meta?.order_id as string | undefined;
-      if (orderId) await updateOrder(orderId, { status: "refunded", financial_status: "refunded", payment_status: "refunded" });
-      return NextResponse.json({ received: true, orderId });
+      try {
+        const { reconcileStripeChargeRefund } = await import("@/services/payment/stripe-refund-reconciliation");
+        await reconcileStripeChargeRefund(String(data.id));
+        return NextResponse.json({ received: true });
+      } catch (error) {
+        console.error("[webhook] Stripe refund reconciliation failed", error);
+        return NextResponse.json({ error: "Refund reconciliation pending" }, { status: 503 });
+      }
     }
 
     return NextResponse.json({ received: true });
@@ -233,16 +237,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ received: true });
     }
 
-    if (eventType === "PAYMENT.CAPTURE.COMPLETED") {
-      const orderId = resource?.purchase_units?.[0]?.reference_id;
-      if (!orderId) return NextResponse.json({ received: true });
-
-      const order = await getOrder(orderId);
-      if (!order) return NextResponse.json({ received: true });
-      if (order.payment_status === "paid") {
-        return NextResponse.json({ received: true, orderId, alreadyPaid: true });
+    if (eventType === "PAYMENT.CAPTURE.REFUNDED") {
+      const localRefundId = resource?.custom_id;
+      const providerRefundId = resource?.id;
+      if (!localRefundId || !providerRefundId) return NextResponse.json({ received: true, reconciliation: "manual_required" });
+      try {
+        const { completeRefund } = await import("@/services/admin/refund-service");
+        await completeRefund(localRefundId, providerRefundId);
+        return NextResponse.json({ received: true });
+      } catch (error) {
+        console.error("[webhook] Refund reconciliation failed", error);
+        return NextResponse.json({ error: "Refund reconciliation pending" }, { status: 503 });
       }
+    }
 
+    if (eventType === "PAYMENT.CAPTURE.COMPLETED") {
       const { getPaymentProvider } = await import("@/services/payment/payment-service");
       const clientId = process.env.PAYPAL_CLIENT_ID;
       const clientSecret = process.env.PAYPAL_CLIENT_SECRET;
@@ -251,6 +260,12 @@ export async function POST(request: NextRequest) {
         if (pp) {
           const captureId = resource.id;
           const result = await pp.getCaptureById(captureId);
+          if (!result.success || !result.referenceOrderId) {
+            return NextResponse.json({ error: "PayPal capture verification unavailable" }, { status: 503 });
+          }
+          const orderId = result.referenceOrderId;
+          const order = await getOrder(orderId);
+          if (!order) return NextResponse.json({ error: "Order not found" }, { status: 404 });
           const check = assertPaymentMatchesOrder(result, {
             id: order.id, total_amount: order.total_amount, currency: order.currency, payment_status: order.payment_status,
           });

@@ -24,11 +24,12 @@ import { ArrowsClockwise, CheckCircle, Eye, MagnifyingGlass, Package, WarningCir
 const REFUND_PAGE_SIZE = 20;
 
 interface Refund {
+  items?: Array<{ id: string; product_title: string; product_type: string; quantity: number }>;
   id: string
   order_id: string
   reason: string
   amount: string
-  status: "pending" | "approved" | "rejected" | "returned" | "completed"
+  status: "pending" | "approved" | "rejected" | "returned" | "completed" | "processing"
   evidence?: string
   admin_note?: string
   restocked: boolean
@@ -43,6 +44,7 @@ function getRefundOrderNo(refund: Refund): string {
 }
 
 const statusLabels: Record<string, string> = {
+  processing: "支付商处理中 / 待核对",
   pending: "待处理",
   approved: "已通过(待退货)",
   rejected: "已拒绝",
@@ -51,6 +53,7 @@ const statusLabels: Record<string, string> = {
 }
 
 const statusColors: Record<string, string> = {
+  processing: "bg-orange-100 text-orange-700",
   pending: "bg-yellow-100 text-yellow-700",
   approved: "bg-blue-100 text-blue-700",
   rejected: "bg-red-100 text-red-700",
@@ -64,6 +67,8 @@ export default function AdminRefundsPage() {
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState("")
+  const [returnQuantities, setReturnQuantities] = useState<Record<string, number>>({});
+  const [restocking, setRestocking] = useState(false);
   const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "approved" | "rejected" | "returned">("all")
   const [loading, setLoading] = useState(true)
   const [detailOpen, setDetailOpen] = useState(false)
@@ -118,6 +123,16 @@ export default function AdminRefundsPage() {
     }
   }
 
+  const handlePayout = async (id: string) => {
+    try {
+      const response = await apiFetch("/api/admin/refunds", { method: "PUT", body: JSON.stringify({ id, action: "payout" }) });
+      if (!response.ok) throw new Error("Refund requires reconciliation; check provider status before any further action");
+      toast.success("PayPal refund confirmed");
+      setDetailOpen(false);
+      loadRefunds();
+    } catch (error) { toast.error(error instanceof Error ? error.message : "Refund failed"); loadRefunds(); }
+  };
+
   const handleReturn = async (id: string) => {
     try {
       const res = await apiFetch("/api/admin/refunds", {
@@ -125,7 +140,7 @@ export default function AdminRefundsPage() {
         body: JSON.stringify({ id, action: "returned" }),
       })
       if (!res.ok) throw new Error()
-      toast.success("退货确认，库存已加回")
+      toast.success("已确认退货；退款打款与库存回补需分别核对")
       loadRefunds()
     } catch {
       toast.error("退货处理失败")
@@ -137,12 +152,25 @@ export default function AdminRefundsPage() {
       const res = await apiFetch(`/api/admin/refunds/${id}`)
       const json = await res.json().catch(() => ({}))
       if (!res.ok || json.error) throw new Error(json.error || "Failed to load refund detail")
+      setReturnQuantities({});
       setSelected(json.data)
       setDetailOpen(true)
     } catch {
       toast.error("加载详情失败")
     }
   }
+
+  const handleRestock = async () => {
+    if (!selected || restocking) return;
+    setRestocking(true);
+    try {
+      const response = await apiFetch("/api/admin/refunds", { method: "PUT", body: JSON.stringify({ id: selected.id, action: "restock", return_items: Object.entries(returnQuantities).filter(([, quantity]) => quantity > 0).map(([order_item_id, quantity]) => ({ order_item_id, quantity })) }) });
+      if (!response.ok) throw new Error("入库失败：请核对退货数量和原始扣库记录；历史无记录订单需人工对账。");
+      toast.success("退货已按原仓位入库");
+      setDetailOpen(false); loadRefunds();
+    } catch (error) { toast.error(error instanceof Error ? error.message : "入库失败"); }
+    finally { setRestocking(false); }
+  };
 
   const handleCreate = async () => {
     if (!orderId || !reason || !amount) {
@@ -466,9 +494,20 @@ export default function AdminRefundsPage() {
                   </div>
                 </div>
                 <div>
+                  {["approved", "returned"].includes(selected.status) && (
+                    <Button onClick={() => handlePayout(selected.id)}>提交已批准的 PayPal 退款（管理员）</Button>
+                  )}
                   <Label>退款原因</Label>
                   <p className="text-sm p-2 bg-gray-50 rounded mt-1">{selected.reason}</p>
                 </div>
+                {!selected.restocked && ["approved", "returned", "processing", "completed"].includes(selected.status) && selected.items?.some(item => item.product_type === "physical") && <div className="space-y-2">
+                  <Label>本次实际收到的退货数量（一次确认）</Label>
+                  {selected.items.filter(item => item.product_type === "physical").map(item => <div key={item.id} className="flex items-center gap-2">
+                    <span className="flex-1 text-sm">{item.product_title}</span>
+                    <Input className="w-24" type="number" min={0} max={item.quantity} step={1} value={returnQuantities[item.id] || 0} onChange={e => setReturnQuantities(values => ({ ...values, [item.id]: Number(e.target.value) }))} />
+                  </div>)}
+                  <Button disabled={restocking} onClick={handleRestock}>确认收到并按原仓位入库</Button>
+                </div>}
                 {selected.evidence && (
                   <div>
                     <Label>凭证说明</Label>

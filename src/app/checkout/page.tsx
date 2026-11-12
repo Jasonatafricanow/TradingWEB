@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useCart } from "@/contexts/cart-context";
 import { useAuth } from "@/contexts/auth-context";
@@ -60,11 +60,16 @@ export default function CheckoutPage() {
 
   // ── Maputo Delivery ──
   interface CheckoutZone { id: string; name: string; name_en: string | null; base_rate: string; free_shipping_min: string | null; time_slots: unknown; }
+  const checkoutAttempt = useRef({ signature: "", key: "" });
   const [deliveryZones, setDeliveryZones] = useState<CheckoutZone[]>([]);
   const [selectedZone, setSelectedZone] = useState("");
   const [deliveryDate, setDeliveryDate] = useState("");
   const [deliveryTimeSlot, setDeliveryTimeSlot] = useState("");
-  const [shippingCost, setShippingCost] = useState(0);
+  const selectedDeliveryZone = deliveryZones.find(zone => zone.id === selectedZone);
+  const shippingThreshold = Number(selectedDeliveryZone?.free_shipping_min || 0);
+  const shippingCost = selectedDeliveryZone
+    ? (shippingThreshold > 0 && Math.max(0, total - couponDiscount) >= shippingThreshold ? 0 : Number(selectedDeliveryZone.base_rate))
+    : 0;
   const [renderedAt] = useState(() => Date.now());
 
   useEffect(() => {
@@ -159,9 +164,7 @@ export default function CheckoutPage() {
         }
       } catch { /* ignore */ }
 
-      const orderRes = await apiFetch("/api/orders", {
-        method: "POST",
-        body: JSON.stringify({
+      const orderBody = {
           paymentMethod: provider,
           buyerEmail: email,
           buyerName: name,
@@ -178,7 +181,11 @@ export default function CheckoutPage() {
             quantity: item.quantity,
             delivery_method: (item as any).delivery_method || null,
           })),
-        }),
+      };
+      const signature = JSON.stringify(orderBody);
+      if (checkoutAttempt.current.signature !== signature) checkoutAttempt.current = { signature, key: crypto.randomUUID() };
+      const orderRes = await apiFetch("/api/orders", {
+        method: "POST", headers: { "Idempotency-Key": checkoutAttempt.current.key }, body: signature,
       });
       const orderJson = await orderRes.json();
       if (!orderRes.ok || orderJson.error) {
@@ -360,12 +367,6 @@ export default function CheckoutPage() {
                 <Label>{translate(locale, "checkout.delivery_zone")}</Label>
                 <Select value={selectedZone} onValueChange={(v) => {
                   setSelectedZone(v);
-                  const zone = deliveryZones.find(z => z.id === v);
-                  if (zone) {
-                    const subtotal = total - couponDiscount;
-                    const fsm = zone.free_shipping_min ? Number(zone.free_shipping_min) : 0;
-                    setShippingCost(fsm > 0 && subtotal >= fsm ? 0 : Number(zone.base_rate));
-                  }
                   setDeliveryTimeSlot("");
                 }}>
                   <SelectTrigger><SelectValue placeholder={translate(locale, "checkout.select_zone")} /></SelectTrigger>

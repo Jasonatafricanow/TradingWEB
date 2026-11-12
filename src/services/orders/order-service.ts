@@ -1,3 +1,4 @@
+import { posTransaction } from "@/services/admin/pos-idempotency-service";
 import { db } from '@/lib/db';
 import { eq, desc, and, isNull, ne } from 'drizzle-orm';
 import { orders, orderItems, products, productVariants, inventory, deliveryZones } from '@/storage/database/shared/schema';
@@ -201,15 +202,12 @@ const [countRows] = await db.$client.execute(
   let couponId: string | null = null;
   let discountAmount = 0;
   if (input.coupon_code && input.coupon_code.trim()) {
-    try {
-      const v = await validateCoupon(input.coupon_code.trim(), subtotal);
-      if (v.valid && v.coupon && v.discount && v.discount > 0) {
-        couponId = v.coupon.id;
-        discountAmount = Math.min(v.discount, subtotal);
-      }
-    } catch {
-      // 优惠码校验失败：忽略，按原价下单
+    const v = await validateCoupon(input.coupon_code.trim(), subtotal);
+    if (!v.valid || !v.coupon || !Number.isFinite(v.discount) || !v.discount || v.discount <= 0) {
+      throw new ValidationError('Coupon is no longer valid; review your order before retrying');
     }
+    couponId = v.coupon.id;
+    discountAmount = Math.min(v.discount, subtotal);
   }
 
   // Shipping is priced from the selected zone on the server; a client-sent
@@ -224,7 +222,7 @@ const [countRows] = await db.$client.execute(
   }
   const totalAmount = Math.max(0, subtotal - discountAmount + shippingCost).toFixed(2);
 
-  await db.transaction(async (tx) => {
+  await posTransaction(async (tx) => {
     await tx.insert(orders).values({
       id: orderId,
       order_no: orderNo,
@@ -251,7 +249,7 @@ const [countRows] = await db.$client.execute(
     }
   });
 
-  const [order] = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
+  const [order] = await posTransaction(tx => tx.select().from(orders).where(eq(orders.id, orderId)).limit(1));
   return order;
 }
 

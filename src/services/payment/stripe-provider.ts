@@ -32,21 +32,19 @@ export class StripeProvider {
       formData.append("metadata[order_id]", params.orderId)
       formData.append("payment_intent_data[metadata][order_id]", params.orderId)
 
-      params.items.forEach((item, i) => {
-        formData.append(`line_items[${i}][price_data][unit_amount]`, Math.round(item.unitPrice * 100).toString())
-        formData.append(`line_items[${i}][price_data][currency]`, item.currency.toLowerCase())
-        formData.append(`line_items[${i}][price_data][product_data][name]`, item.name)
-        if (item.description) {
-          formData.append(`line_items[${i}][price_data][product_data][description]`, item.description)
-        }
-        formData.append(`line_items[${i}][quantity]`, item.quantity.toString())
-      })
+      const amountMinor = Math.round(params.totalAmount * 100);
+      if (!Number.isSafeInteger(amountMinor) || amountMinor <= 0) throw new Error("Invalid payable amount");
+      formData.append("line_items[0][price_data][unit_amount]", String(amountMinor));
+      formData.append("line_items[0][price_data][currency]", params.currency.toLowerCase());
+      formData.append("line_items[0][price_data][product_data][name]", `Order ${params.orderId}`);
+      formData.append("line_items[0][quantity]", "1");
 
       const res = await fetch(`${this.baseUrl}/checkout/sessions`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${this.secretKey}`,
           "Content-Type": "application/x-www-form-urlencoded",
+          "Idempotency-Key": `checkout-${params.orderId}`,
         },
         body: formData.toString(),
       })

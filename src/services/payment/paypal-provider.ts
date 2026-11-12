@@ -140,6 +140,7 @@ export class PayPalProvider {
         headers: {
           Authorization: `Bearer ${accessToken}`,
           "Content-Type": "application/json",
+          "PayPal-Request-Id": `order-${params.orderId}`,
         },
         body: JSON.stringify(orderPayload),
       })
@@ -219,6 +220,7 @@ export class PayPalProvider {
         headers: {
           Authorization: `Bearer ${accessToken}`,
           "Content-Type": "application/json",
+          "PayPal-Request-Id": `capture-${paymentId}`,
         },
       })
       const data = await res.json()
@@ -300,7 +302,18 @@ export class PayPalProvider {
     }
   }
 
-  async refund(params: { paymentId: string; amount: number; reason?: string }): Promise<RefundResult> {
+  async getRefundById(refundId: string): Promise<{ id: string; localRefundId: string; status: string; amount: string; currency: string }> {
+    const accessToken = await this.getAccessToken();
+    const response = await fetch(`${this.baseUrl}/v2/payments/refunds/${encodeURIComponent(refundId)}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!response.ok) throw new Error("PayPal refund verification failed");
+    const data = await response.json();
+    return { id: data.id, localRefundId: data.custom_id, status: data.status,
+      amount: data.amount?.value, currency: data.amount?.currency_code };
+  }
+
+  async refund(params: { paymentId: string; amount: number; reason?: string; currency: string; refundId: string }): Promise<RefundResult> {
     try {
       const accessToken = await this.getAccessToken()
       const res = await fetch(
@@ -310,10 +323,12 @@ export class PayPalProvider {
           headers: {
             Authorization: `Bearer ${accessToken}`,
             "Content-Type": "application/json",
+            "PayPal-Request-Id": params.refundId,
           },
           body: JSON.stringify({
-            amount: { value: params.amount.toFixed(2), currency_code: "USD" },
-            note_to_payer: params.reason || "Refund",
+            amount: { value: params.amount.toFixed(2), currency_code: params.currency },
+            custom_id: params.refundId,
+            note_to_payer: (params.reason || "Refund").slice(0, 255),
           }),
         }
       )

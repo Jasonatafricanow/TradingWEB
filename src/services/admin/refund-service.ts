@@ -1,3 +1,5 @@
+import { posTransaction } from "./pos-idempotency-service";
+import { PayPalProvider } from "@/services/payment/paypal-provider";
 import { db } from '@/lib/db';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import {
@@ -48,6 +50,7 @@ export interface ListRefundsOptions {
 
 // 用 src/lib/enums 的常量做白名单，避免拼错与硬编码字符串漂移。
 const REFUND_STATUS_WHITELIST = new Set<string>([
+  "processing",
   RefundStatus.Pending,
   RefundStatus.Approved,
   RefundStatus.Rejected,
@@ -99,36 +102,32 @@ export async function listRefunds(options: ListRefundsOptions = {}) {
 }
 
 export async function createRefund(input: { order_id: string; amount: string; reason: string; user_id?: string; evidence?: string; admin_note?: string; processed_by?: string }) {
-  try {
-    const [order] = await db.select().from(orders).where(eq(orders.id, input.order_id)).limit(1);
-    if (!order) throw new Error('Order not found');
-
+  return db.transaction(async tx => {
+    const [order] = await tx.select().from(orders).where(eq(orders.id, input.order_id)).for('update').limit(1);
+    if (!order) throw new PosApiError('ORDER_NOT_FOUND', 'Order not found', 404);
+    if (order.payment_status !== 'paid') throw new PosApiError('ORDER_NOT_PAID', 'Only paid orders can be refunded', 409);
+    const amount = parseMoneyToCents(input.amount);
+    if (amount <= 0) throw new PosApiError('INVALID_REFUND_AMOUNT', 'Refund must be positive', 400);
+    const reserved = await tx.select({ amount: refunds.amount }).from(refunds).where(and(
+      eq(refunds.order_id, input.order_id),
+      inArray(refunds.status, [RefundStatus.Pending, RefundStatus.Approved, RefundStatus.Returned, RefundStatus.Completed, "processing"]),
+    ));
+    const totalReserved = reserved.reduce((sum, row) => sum + parseMoneyToCents(row.amount), 0);
+    if (totalReserved + amount > parseMoneyToCents(order.total_amount)) throw new PosApiError('REFUND_EXCEEDS_TOTAL', 'Refund exceeds remaining order amount', 409);
     const id = randomUUID();
-    await db.insert(refunds).values({
-      id,
-      order_id: input.order_id,
-      user_id: input.user_id || null,
-      amount: input.amount,
-      reason: input.reason,
-      status: RefundStatus.Pending,
-      evidence: input.evidence || null,
-      admin_note: input.admin_note || null,
-      processed_by: input.processed_by || null,
-      restocked: false,
-    });
-
-    await db.update(orders).set({ has_refund: true }).where(eq(orders.id, input.order_id));
-
-    const [data] = await db.select().from(refunds).where(eq(refunds.id, id)).limit(1);
+    await tx.insert(refunds).values({ id, order_id: input.order_id, user_id: input.user_id || null,
+      amount: formatCents(amount), reason: input.reason, status: RefundStatus.Pending,
+      evidence: input.evidence || null, admin_note: input.admin_note || null,
+      processed_by: input.processed_by || null, restocked: false });
+    await tx.update(orders).set({ has_refund: true }).where(eq(orders.id, input.order_id));
+    const [data] = await tx.select().from(refunds).where(eq(refunds.id, id)).limit(1);
     return data;
-  } catch (error) {
-    throw error;
-  }
+  });
 }
 
 export async function approveRefund(refundId: string, adminId?: string) {
   try {
-    await db.update(refunds).set({ status: RefundStatus.Approved, processed_by: adminId || null, processed_at: new Date() }).where(eq(refunds.id, refundId));
+    await db.update(refunds).set({ status: RefundStatus.Approved, processed_by: adminId || null, processed_at: new Date() }).where(and(eq(refunds.id, refundId), eq(refunds.status, RefundStatus.Pending)));
     const [data] = await db.select().from(refunds).where(eq(refunds.id, refundId)).limit(1);
     return data;
   } catch (error) {
@@ -138,7 +137,7 @@ export async function approveRefund(refundId: string, adminId?: string) {
 
 export async function rejectRefund(refundId: string, adminNote?: string, adminId?: string) {
   try {
-    await db.update(refunds).set({ status: RefundStatus.Rejected, admin_note: adminNote || null, processed_by: adminId || null, processed_at: new Date() }).where(eq(refunds.id, refundId));
+    await db.update(refunds).set({ status: RefundStatus.Rejected, admin_note: adminNote || null, processed_by: adminId || null, processed_at: new Date() }).where(and(eq(refunds.id, refundId), eq(refunds.status, RefundStatus.Pending)));
     const [data] = await db.select().from(refunds).where(eq(refunds.id, refundId)).limit(1);
     return data;
   } catch (error) {
@@ -146,17 +145,63 @@ export async function rejectRefund(refundId: string, adminNote?: string, adminId
   }
 }
 
-export async function completeRefund(refundId: string, transactionId?: string) {
-  try {
-    const updateData: Record<string, unknown> = { status: RefundStatus.Completed, restocked: true, processed_at: new Date() };
-    if (transactionId) updateData.admin_note = 'Transaction: ' + transactionId;
-    await db.update(refunds).set(updateData).where(eq(refunds.id, refundId));
-    const [data] = await db.select().from(refunds).where(eq(refunds.id, refundId)).limit(1);
-    return data;
-  } catch (error) {
-    throw error;
-  }
+function paypalRefundProvider() {
+  const clientId = process.env.PAYPAL_CLIENT_ID;
+  const clientSecret = process.env.PAYPAL_CLIENT_SECRET;
+  if (!clientId || !clientSecret) throw new PosApiError('PAYMENT_NOT_CONFIGURED', 'PayPal is not configured', 503);
+  return new PayPalProvider(clientId, clientSecret, process.env.PAYPAL_SANDBOX !== 'false');
 }
+
+export async function completeRefund(refundId: string, transactionId?: string) {
+  if (!transactionId) throw new PosApiError('REFUND_VERIFICATION_REQUIRED', 'A provider refund ID is required', 400);
+  const verified = await paypalRefundProvider().getRefundById(transactionId);
+  if (verified.id !== transactionId || verified.localRefundId !== refundId || verified.status !== 'COMPLETED') {
+    throw new PosApiError('REFUND_NOT_CONFIRMED', 'PayPal has not confirmed this refund', 409);
+  }
+  return db.transaction(async tx => {
+    const [initial] = await tx.select().from(refunds).where(eq(refunds.id, refundId)).limit(1);
+    if (!initial) throw new PosApiError('REFUND_NOT_FOUND', 'Refund not found', 404);
+    const [order] = await tx.select().from(orders).where(eq(orders.id, initial.order_id)).for('update').limit(1);
+    const [refund] = await tx.select().from(refunds).where(eq(refunds.id, refundId)).for('update').limit(1);
+    if (!order || !refund || order.source === 'pos') throw new PosApiError('INVALID_REFUND_ORDER', 'Invalid online refund order', 409);
+    if (verified.currency !== (order.currency || 'USD') || parseMoneyToCents(verified.amount) !== parseMoneyToCents(refund.amount)) {
+      throw new PosApiError('REFUND_MISMATCH', 'Provider refund amount or currency mismatch', 409);
+    }
+    if (refund.status === RefundStatus.Completed) return refund;
+    if (refund.status !== 'processing') throw new PosApiError('INVALID_REFUND_STATE', 'Refund was not submitted to provider', 409);
+    const total = parseMoneyToCents(order.refunded_total || '0.00') + parseMoneyToCents(refund.amount);
+    if (total > parseMoneyToCents(order.total_amount)) throw new PosApiError('REFUND_EXCEEDS_TOTAL', 'Refund exceeds order total', 409);
+    const full = total === parseMoneyToCents(order.total_amount);
+    await tx.update(refunds).set({ status: RefundStatus.Completed, processed_at: new Date(),
+      admin_note: `${refund.admin_note || ''}\nPayPal refund: ${transactionId}`.trim() }).where(eq(refunds.id, refundId));
+    await tx.update(orders).set({ refunded_total: formatCents(total), financial_status: full ? 'refunded' : 'partially_refunded',
+      ...(full ? { payment_status: 'refunded' } : {}) }).where(eq(orders.id, order.id));
+    const [data] = await tx.select().from(refunds).where(eq(refunds.id, refundId)).limit(1);
+    return data;
+  });
+}
+
+export async function submitPayPalRefund(refundId: string, userId: string) {
+  const provider = paypalRefundProvider();
+  const prepared = await db.transaction(async tx => {
+    const [initial] = await tx.select().from(refunds).where(eq(refunds.id, refundId)).limit(1);
+    if (!initial) throw new PosApiError('REFUND_NOT_FOUND', 'Refund not found', 404);
+    const [order] = await tx.select().from(orders).where(eq(orders.id, initial.order_id)).for('update').limit(1);
+    const [refund] = await tx.select().from(refunds).where(eq(refunds.id, refundId)).for('update').limit(1);
+    if (!order || !refund || order.source === 'pos' || order.payment_method !== 'paypal' || !order.payment_id) throw new PosApiError('PAYPAL_ORDER_REQUIRED', 'A captured PayPal order is required', 409);
+    if (![RefundStatus.Approved, RefundStatus.Returned].includes(refund.status as typeof RefundStatus.Approved)) throw new PosApiError('INVALID_REFUND_STATE', 'Refund must be approved and not already submitted', 409);
+    if (parseMoneyToCents(refund.amount) <= 0 || parseMoneyToCents(refund.amount) + parseMoneyToCents(order.refunded_total || '0.00') > parseMoneyToCents(order.total_amount)) throw new PosApiError('REFUND_EXCEEDS_TOTAL', 'Invalid remaining refund amount', 409);
+    await tx.update(refunds).set({ status: 'processing', processed_by: userId, processed_at: new Date() }).where(eq(refunds.id, refundId));
+    return { order, refund };
+  });
+  // Persist intent before sending money. Ambiguous failures remain processing;
+  // verified webhook/reconciliation completes them without sending a second refund.
+  const result = await provider.refund({ paymentId: prepared.order.payment_id!, amount: Number(prepared.refund.amount),
+    currency: prepared.order.currency || 'USD', refundId, reason: prepared.refund.reason });
+  if (!result.success || !result.refundId) throw new PosApiError('REFUND_PENDING_VERIFICATION', 'Refund requires provider reconciliation; do not resubmit', 409);
+  return completeRefund(refundId, result.refundId);
+}
+
 export async function getRefund(id: string) {
   try {
     const [rows] = await db.$client.execute(
@@ -169,17 +214,60 @@ export async function getRefund(id: string) {
 
     // 前端读 selected.order.order_no（嵌套对象），所以把扁平 JOIN 字段封装为嵌套对象，
     // 同时保留 order_no / total_amount 在顶层保持向后兼容。
-    return withOrder(row);
+    const items = await db.select().from(orderItems).where(eq(orderItems.order_id, String(row.order_id)));
+    return { ...withOrder(row), items };
   } catch (error) {
     throw error;
   }
 }
 export async function processRefund(id: string, action: string, adminNote?: string, userId?: string) {
-  if (action === RefundStatus.Approved) return approveRefund(id, adminNote || "");
-  return rejectRefund(id, adminNote, userId);
+  if (action === RefundStatus.Approved) return approveRefund(id, userId);
+  if (action === RefundStatus.Rejected) return rejectRefund(id, adminNote, userId);
+  throw new PosApiError("INVALID_REFUND_ACTION", "Invalid refund action", 400);
 }
 export async function confirmReturn(id: string, userId?: string) {
-  return completeRefund(id);
+  // Receipt of goods does not prove provider repayment or inventory allocation.
+  await db.update(refunds).set({ status: RefundStatus.Returned, processed_by: userId || null, processed_at: new Date() })
+    .where(and(eq(refunds.id, id), eq(refunds.status, RefundStatus.Approved)));
+  const [data] = await db.select().from(refunds).where(eq(refunds.id, id)).limit(1);
+  if (!data || data.status !== RefundStatus.Returned) throw new PosApiError('INVALID_REFUND_STATE', 'Refund must be approved before confirming return', 409);
+  return data;
+}
+
+export async function restockWebRefund(id: string, userId: string, returnItems: Array<{ order_item_id: string; quantity: number }>) {
+  if (!Array.isArray(returnItems) || returnItems.length === 0 || returnItems.length > 100
+    || returnItems.some(line => !line.order_item_id || !Number.isInteger(line.quantity) || line.quantity <= 0)
+    || new Set(returnItems.map(line => line.order_item_id)).size !== returnItems.length) {
+    throw new PosApiError("INVALID_RETURN_ITEMS", "Select valid unique return lines and quantities", 400);
+  }
+  return db.transaction(async tx => {
+    const [initial] = await tx.select().from(refunds).where(eq(refunds.id, id)).limit(1);
+    if (!initial) throw new PosApiError("REFUND_NOT_FOUND", "Refund not found", 404);
+    const [order] = await tx.select().from(orders).where(eq(orders.id, initial.order_id)).for("update").limit(1);
+    const [refund] = await tx.select().from(refunds).where(eq(refunds.id, id)).for("update").limit(1);
+    if (!order || order.source === "pos") throw new PosApiError("WEB_ORDER_REQUIRED", "Use POS return workflow for POS sales", 409);
+    if (!["approved", "returned", "processing", "completed"].includes(refund.status)) throw new PosApiError("INVALID_REFUND_STATE", "Return must be approved", 409);
+    const previous = await tx.select().from(posRefundItems).where(eq(posRefundItems.refund_id, id));
+    if (refund.restocked) {
+      const canonical = (lines: Array<{ order_item_id: string; quantity: number }>) => JSON.stringify(lines.map(line => ({ order_item_id: line.order_item_id, quantity: line.quantity })).sort((a,b) => a.order_item_id.localeCompare(b.order_item_id)));
+      if (canonical(previous) !== canonical(returnItems)) throw new PosApiError("RETURN_ALREADY_RECORDED", "Return already recorded with different lines", 409);
+      return refund;
+    }
+    const items = await tx.select().from(orderItems).where(eq(orderItems.order_id, order.id)).for("update");
+    const totals = await tx.select({ orderItemId: posRefundItems.order_item_id, quantity: sql<number>`SUM(${posRefundItems.quantity})` }).from(posRefundItems)
+      .where(inArray(posRefundItems.order_item_id, returnItems.map(line => line.order_item_id))).groupBy(posRefundItems.order_item_id);
+    for (const line of returnItems) {
+      const item = items.find(item => item.id === line.order_item_id);
+      const already = Number(totals.find(total => total.orderItemId === line.order_item_id)?.quantity || 0);
+      if (!item || item.product_type !== "physical" || already + line.quantity > item.quantity) throw new PosApiError("RETURN_QUANTITY_EXCEEDED", "Return line is invalid or exceeds remaining quantity", 409);
+      await restoreInventory({ originalOrderId: order.id, storeId: order.store_id, operatorId: userId, referenceType: "refund", referenceId: id, note: "Web return received",
+        lines: [{ productId: item.product_id, variantId: item.variant_id, productType: item.product_type, title: item.product_title, quantity: line.quantity }] }, undefined, tx);
+      await tx.insert(posRefundItems).values({ id: randomUUID(), refund_id: id, order_item_id: item.id, quantity: line.quantity, restock: true });
+    }
+    await tx.update(refunds).set({ restocked: true, ...(refund.status === "approved" ? { status: "returned" } : {}) }).where(eq(refunds.id, id));
+    await tx.insert(orderTimeline).values({ id: randomUUID(), order_id: order.id, action: "return_restocked", description: `Refund ${id}: verified return lines restored to original stock locations`, operator_id: userId });
+    return { ...refund, restocked: true };
+  });
 }
 
 export interface PosOriginalOrder {
@@ -193,6 +281,7 @@ export interface PosOriginalOrder {
 }
 
 export interface PosOriginalItem {
+  orderId?: string;
   id: string;
   productId: string;
   variantId: string | null;
@@ -336,7 +425,7 @@ export async function preparePosReturn(
 
 const databasePosReturnDependencies: PosRefundDependencies = {
   runIdempotent,
-  transaction: (work) => db.transaction(work),
+  transaction: (work) => posTransaction(work),
   findOpenShiftId,
   enqueueAuditEvent: enqueuePosAuditEvent,
   consumeApprovalToken,
@@ -355,6 +444,7 @@ const databasePosReturnDependencies: PosRefundDependencies = {
   async lockOriginalItems(orderId, tx) {
     const rows = await tx.select({
       id: orderItems.id,
+      orderId: orderItems.order_id,
       productId: orderItems.product_id,
       variantId: orderItems.variant_id,
       productType: orderItems.product_type,
@@ -376,6 +466,7 @@ const databasePosReturnDependencies: PosRefundDependencies = {
   },
   async restockReturn(item, quantity, storeId, operatorId, refundId, tx) {
     await restoreInventory({
+      originalOrderId: item.orderId,
       storeId,
       operatorId,
       referenceType: 'refund',
@@ -447,6 +538,7 @@ export async function refundPosOrder(
     requestHash: resourceHash,
   }, () => dependencies.transaction(async (tx) => {
     const approvedBy = await dependencies.consumeApprovalToken(input.approval_token!, 'refund', resourceHash, input.store_id, tx);
+    if (approvedBy === input.operator.staffId) throw new PosApiError('INDEPENDENT_APPROVER_REQUIRED', 'Approval must be issued by another authorized staff member', 403);
     const prepared = await preparePosReturn({
       orderId: input.order_id,
       storeId: input.store_id,

@@ -97,3 +97,11 @@ describe("refundPosOrder", () => {
     expect(deps.runIdempotent).not.toHaveBeenCalled();
   });
 });
+
+it("rejects self-approved refunds before touching the original order", async () => {
+  const { deps } = dependencies();
+  deps.consumeApprovalToken.mockResolvedValueOnce("staff-1");
+  await expect(refundPosOrder(request(), deps as never)).rejects.toMatchObject({ code: "INDEPENDENT_APPROVER_REQUIRED" });
+  expect(deps.lockOriginalOrder).not.toHaveBeenCalled();
+  expect(deps.restockReturn).not.toHaveBeenCalled();
+});

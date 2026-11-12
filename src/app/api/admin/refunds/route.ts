@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { requireUser, requireStaffRole, errorResponse } from "@/services/auth/auth-middleware"
-import { listRefunds, getRefund, createRefund, processRefund, confirmReturn } from "@/services/admin/refund-service"
+import { listRefunds, getRefund, createRefund, processRefund, confirmReturn, restockWebRefund, submitPayPalRefund, completeRefund } from "@/services/admin/refund-service"
 
 // GET /api/admin/refunds?page=&pageSize=&status=&search=
 export async function GET(request: NextRequest) {
@@ -43,9 +43,11 @@ export async function PUT(request: NextRequest) {
     await requireStaffRole(request, ["admin", "operator"]);
     const user = await requireUser(request)
     const body = await request.json()
-    const { id, action, admin_note } = body as {
+    const { id, action, admin_note, transaction_id, return_items } = body as {
       id: string
-      action: "approved" | "rejected" | "returned"
+      action: "approved" | "rejected" | "returned" | "payout" | "reconcile" | "restock"
+      return_items?: Array<{ order_item_id: string; quantity: number }>
+      transaction_id?: string
       admin_note?: string
     }
 
@@ -54,8 +56,13 @@ export async function PUT(request: NextRequest) {
     }
 
     let data
-    if (action === "returned") {
-      // 确认退货 → 加库存 → 完成
+    if (action === "payout" || action === "reconcile") {
+      await requireStaffRole(request, ["admin"]);
+      data = action === "payout" ? await submitPayPalRefund(id, user.id) : await completeRefund(id, transaction_id);
+    } else if (action === "restock") {
+      data = await restockWebRefund(id, user.id, return_items || []);
+    } else if (action === "returned") {
+      // Receipt confirmation is separate from repayment and inventory restocking.
       data = await confirmReturn(id, user.id)
     } else {
       data = await processRefund(id, action, admin_note, user.id)
