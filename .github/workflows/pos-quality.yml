@@ -1,6 +1,7 @@
 name: TradingWEB quality gate
 
 on:
+  workflow_call:
   pull_request:
   push:
     branches: [main]
@@ -37,6 +38,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm test
+      - run: pnpm test:node
       - run: pnpm ts-check
       - run: pnpm lint:build
       - run: pnpm i18n:check

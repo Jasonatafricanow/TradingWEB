@@ -1,15 +1,15 @@
 import type { Metadata } from 'next';
 import Script from 'next/script';
-import { Geist, Hanken_Grotesk, JetBrains_Mono, Playfair_Display } from 'next/font/google';
+import localFont from 'next/font/local';
 import './globals.css';
 import { ClientProviders } from '@/components/client-providers';
 import { organizationJsonLd } from '@/lib/seo';
 import { db } from '@/lib/db';
 
-const geist = Geist({ subsets: ['latin'], variable: '--font-geist' });
-const hankenGrotesk = Hanken_Grotesk({ subsets: ['latin'], variable: '--font-hanken' });
-const jetbrainsMono = JetBrains_Mono({ subsets: ['latin'], variable: '--font-mono-custom' });
-const playfair = Playfair_Display({ subsets: ['latin'], variable: '--font-serif-custom' });
+const geist = localFont({ src: '../../public/fonts/Geist.ttf', display: 'swap', variable: '--font-geist' });
+const hankenGrotesk = localFont({ src: '../../public/fonts/HankenGrotesk.ttf', display: 'swap', variable: '--font-hanken' });
+const jetbrainsMono = localFont({ src: '../../public/fonts/JetBrainsMono.ttf', display: 'swap', variable: '--font-mono-custom' });
+const playfair = localFont({ src: '../../public/fonts/PlayfairDisplay.ttf', display: 'swap', variable: '--font-serif-custom' });
 
 export const metadata: Metadata = {
   title: {

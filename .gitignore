@@ -144,3 +144,5 @@ source-html/
 .mimosa/
 
 !scripts/write-build-info.mjs
+
+!scripts/build.mjs
