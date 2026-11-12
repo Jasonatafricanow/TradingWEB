@@ -1,15 +1,11 @@
-﻿import { db } from '@/lib/db';
-import { eq, gte } from 'drizzle-orm';
-import { orders } from '@/storage/database/shared/schema';
+import { db } from '@/lib/db';
 
-const recentBriefings = new Set<string>();
-
-async function queryWithRetry<T>(query: string, params: any[], maxRetries = 3): Promise<T> {
+async function queryWithRetry<T>(query: string, params: unknown[], maxRetries = 3): Promise<T> {
   let lastError: Error | null = null;
   for (let i = 0; i < maxRetries; i++) {
     try {
       const { db } = await import("@/lib/db");
-      const [rows] = await db.$client.execute(query, params);
+      const [rows] = await db.$client.execute(query, params as never[]);
       return rows as T;
     } catch (err) {
       lastError = err instanceof Error ? err : new Error(String(err));
@@ -21,40 +17,49 @@ async function queryWithRetry<T>(query: string, params: any[], maxRetries = 3): 
   throw lastError || new Error("Query failed after retries");
 }
 
-export async function generateDailyBriefing() {
-  try {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+/**
+ * Yesterday's operating summary (the cron runs at 08:00 and reports the
+ * previous day). Every number is read from the database; metrics with no
+ * data source (page views) are null, never a made-up 0.
+ */
+export async function generateDailyBriefing(now = new Date()) {
+  const start = new Date(now);
+  start.setHours(0, 0, 0, 0);
+  start.setDate(start.getDate() - 1);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 1);
+  const range = [start, end];
 
-    const countRows = await queryWithRetry<Record<string, unknown>[]>(
-      'SELECT COUNT(*) as count FROM orders WHERE created_at >= ? AND created_at < ?',
-      [today.toISOString(), tomorrow.toISOString()]
-    );
-    const newOrders = Number((countRows as Record<string, unknown>[])[0]?.count || 0);
+  const one = async (query: string, params: unknown[]) => {
+    const rows = await queryWithRetry<Record<string, unknown>[]>(query, params);
+    return Number(rows[0]?.value || 0);
+  };
 
-    const pendingRows = await queryWithRetry<Record<string, unknown>[]>(
-      'SELECT COUNT(*) as count FROM orders WHERE status = ?',
-      ['pending']
-    );
-    const pendingOrders = Number((pendingRows as Record<string, unknown>[])[0]?.count || 0);
+  const [newOrders, paidOrders, revenue, pendingOrders, lowStock, recoveredCarts] = await Promise.all([
+    one('SELECT COUNT(*) AS value FROM orders WHERE created_at >= ? AND created_at < ?', range),
+    // Paid = payment confirmed, whatever the later fulfilment status is.
+    one("SELECT COUNT(*) AS value FROM orders WHERE created_at >= ? AND created_at < ? AND payment_status IN ('paid', 'refunded')", range),
+    one("SELECT COALESCE(SUM(total_amount), 0) AS value FROM orders WHERE created_at >= ? AND created_at < ? AND payment_status IN ('paid', 'refunded')", range),
+    one("SELECT COUNT(*) AS value FROM orders WHERE status = 'pending'", []),
+    one('SELECT COUNT(*) AS value FROM inventory WHERE stock <= low_stock_threshold', []),
+    one('SELECT COUNT(*) AS value FROM abandoned_carts WHERE recovered_at >= ? AND recovered_at < ?', range),
+  ]);
 
-    const revRows = await queryWithRetry<Record<string, unknown>[]>(
-      'SELECT COALESCE(SUM(total_amount), 0) as total FROM orders WHERE created_at >= ? AND created_at < ? AND status = ?',
-      [today.toISOString(), tomorrow.toISOString(), 'paid']
-    );
-    const revenue = Number((revRows as Record<string, unknown>[])[0]?.total || 0);
+  return {
+    date: localDate(start),
+    newOrders,
+    paidOrders,
+    revenue,
+    pendingOrders,
+    lowStock,
+    recoveredCarts,
+    pageViews: null as number | null,
+  };
+}
 
-    return {
-      date: today.toISOString().split('T')[0],
-      newOrders,
-      pendingOrders,
-      revenue,
-    };
-  } catch (error) {
-    throw error;
-  }
+function localDate(date: Date) {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
 export async function generateWeeklyBriefing() {
@@ -67,13 +72,13 @@ export async function generateWeeklyBriefing() {
 
     const countRows = await queryWithRetry<Record<string, unknown>[]>(
       'SELECT COUNT(*) as count FROM orders WHERE created_at >= ? AND created_at < ?',
-      [startOfWeek.toISOString(), endOfWeek.toISOString()]
+      [startOfWeek, endOfWeek]
     );
     const ordersCount = Number((countRows as Record<string, unknown>[])[0]?.count || 0);
 
     const revRows = await queryWithRetry<Record<string, unknown>[]>(
-      'SELECT COALESCE(SUM(total_amount), 0) as total FROM orders WHERE created_at >= ? AND created_at < ? AND status = ?',
-      [startOfWeek.toISOString(), endOfWeek.toISOString(), 'paid']
+      'SELECT COALESCE(SUM(total_amount), 0) as total FROM orders WHERE created_at >= ? AND created_at < ? AND payment_status = ?',
+      [startOfWeek, endOfWeek, 'paid']
     );
     const revenue = Number((revRows as Record<string, unknown>[])[0]?.total || 0);
 
@@ -87,7 +92,7 @@ export async function generateWeeklyBriefing() {
     throw error;
   }
 }
-export async function generateBriefing(days?: number) {
+export async function generateBriefing() {
   return generateDailyBriefing();
 }
 /**
@@ -98,9 +103,12 @@ export function renderBriefingHtml(data: {
   weekStart?: string;
   weekEnd?: string;
   newOrders?: number;
+  paidOrders?: number;
   pendingOrders?: number;
   revenue?: number;
   orders?: number;
+  lowStock?: number;
+  recoveredCarts?: number;
 }): string {
   const title = data.date
     ? "Daily Briefing - " + data.date
@@ -114,6 +122,15 @@ export function renderBriefingHtml(data: {
   }
   if (data.pendingOrders !== undefined) {
     rows += "<tr><td style=\"padding:8px 0;color:#64748b;\">Pending Orders</td><td style=\"text-align:right;font-weight:bold;color:#d97706;\">" + data.pendingOrders + "</td></tr>";
+  }
+  if (data.paidOrders !== undefined) {
+    rows += "<tr><td style=\"padding:8px 0;color:#64748b;\">Paid Orders</td><td style=\"text-align:right;font-weight:bold;color:#2563eb;\">" + data.paidOrders + "</td></tr>";
+  }
+  if (data.lowStock !== undefined) {
+    rows += "<tr><td style=\"padding:8px 0;color:#64748b;\">Low Stock Items</td><td style=\"text-align:right;font-weight:bold;color:#dc2626;\">" + data.lowStock + "</td></tr>";
+  }
+  if (data.recoveredCarts !== undefined) {
+    rows += "<tr><td style=\"padding:8px 0;color:#64748b;\">Recovered Carts</td><td style=\"text-align:right;font-weight:bold;color:#7c3aed;\">" + data.recoveredCarts + "</td></tr>";
   }
   if (data.orders !== undefined) {
     rows += "<tr><td style=\"padding:8px 0;color:#64748b;\">Orders</td><td style=\"text-align:right;font-weight:bold;color:#2563eb;\">" + data.orders + "</td></tr>";

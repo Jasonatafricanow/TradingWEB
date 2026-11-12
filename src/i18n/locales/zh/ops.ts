@@ -50,4 +50,7 @@ export const zhOps = {
   "admin.import.warnings_title": "警告：",
   "admin.import.row_warning": "第 {row} 行：{warning}",
   "checkout_result.body_other": "请到我的订单查看最新的支付和履约状态。",
+  "admin.security_not_enforced": "尚未启用：这些选项只会被保存，系统中没有任何地方读取。HTTPS 和限流由 nginx 负责；双重验证和会话超时尚未实现。",
+  "common.go_to_page": "跳转到页码",
+  "common.go": "跳转",
 } as const satisfies Record<keyof typeof enOps, string>;

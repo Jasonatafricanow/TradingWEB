@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server"
 import { requireUser, requireStaffRole, errorResponse } from "@/services/auth/auth-middleware"
 import { db } from '@/lib/db'
 
+// Maintenance mode is stored only: no middleware or page reads it, so the
+// storefront stays open whatever the flag says. Responses carry
+// `enforced: false` so callers cannot mistake the flag for a closed shop.
+
 // GET /api/admin/maintenance
 export async function GET(request: NextRequest) {
   try {
@@ -14,9 +18,11 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       maintenance_mode: data?.value === "true",
+      enforced: false,
     })
-  } catch {
-    return NextResponse.json({ maintenance_mode: false })
+  } catch (err) {
+    // Previously any error (including a failed admin check) answered 200.
+    return errorResponse(err)
   }
 }
 
@@ -32,7 +38,7 @@ export async function PUT(request: NextRequest) {
       ['maintenance_mode', body.enabled ? 'true' : 'false']
     );
 
-    return NextResponse.json({ maintenance_mode: !!body.enabled })
+    return NextResponse.json({ maintenance_mode: !!body.enabled, enforced: false })
   } catch (err) {
     return errorResponse(err)
   }

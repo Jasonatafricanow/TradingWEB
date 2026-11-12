@@ -511,12 +511,17 @@ export default function AdminSettingsPage() {
                   <CardDescription>{t("admin.security_config_desc")}</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  {/* TW-14: nothing reads security.*; keep the values visible but not editable. */}
+                  <p role="note" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+                    {t("admin.security_not_enforced")}
+                  </p>
                   <div className="flex items-center justify-between rounded-lg border p-4">
                     <div>
                       <Label className="font-medium">{t("admin.force_https")}</Label>
                       <p className="text-xs text-muted-foreground">{t("admin.force_https_desc")}</p>
                     </div>
                     <Switch
+                      disabled
                       checked={securityConfig.forceHttps}
                       onCheckedChange={(checked) =>
                         setSecurityConfig({ ...securityConfig, forceHttps: checked })
@@ -529,6 +534,7 @@ export default function AdminSettingsPage() {
                       <p className="text-xs text-muted-foreground">{t("admin.rate_limit_desc")}</p>
                     </div>
                     <Switch
+                      disabled
                       checked={securityConfig.rateLimitEnabled}
                       onCheckedChange={(checked) =>
                         setSecurityConfig({ ...securityConfig, rateLimitEnabled: checked })
@@ -540,6 +546,7 @@ export default function AdminSettingsPage() {
                       <Label>{t("admin.rate_limit_value")}</Label>
                       <Input
                         type="number"
+                        disabled
                         value={securityConfig.rateLimitPerMinute}
                         onChange={(e) =>
                           setSecurityConfig({
@@ -558,6 +565,7 @@ export default function AdminSettingsPage() {
                       <p className="text-xs text-muted-foreground">{t("admin.two_factor_desc")}</p>
                     </div>
                     <Switch
+                      disabled
                       checked={securityConfig.twoFactorEnabled}
                       onCheckedChange={(checked) =>
                         setSecurityConfig({ ...securityConfig, twoFactorEnabled: checked })
@@ -567,6 +575,7 @@ export default function AdminSettingsPage() {
                   <div className="space-y-2">
                     <Label>{t("admin.session_timeout")}</Label>
                     <Select
+                      disabled
                       value={securityConfig.sessionTimeout}
                       onValueChange={(val) =>
                         setSecurityConfig({ ...securityConfig, sessionTimeout: val })

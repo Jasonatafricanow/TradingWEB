@@ -28,11 +28,13 @@ async function handleBriefing(request: NextRequest) {
       success: true,
       date: data.date,
       summary: {
-        revenue: data.revenue || 0,
-        orders: data.newOrders || 0,
-        pv: 0,
-        lowStock: 0,
-        recovered: 0,
+        revenue: data.revenue,
+        orders: data.newOrders,
+        paidOrders: data.paidOrders,
+        // No page-view source exists yet: null means unavailable, not zero.
+        pv: data.pageViews,
+        lowStock: data.lowStock,
+        recovered: data.recoveredCarts,
       },
       emailSent: result.status === "sent",
       emailStatus: result.status,

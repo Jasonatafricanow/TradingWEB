@@ -105,7 +105,7 @@ export default function AdminBriefingPage() {
                   <div className="text-xs text-muted-foreground">订单</div>
                 </div>
                 <div className="p-3 bg-cyan-50 rounded text-center">
-                  <div className="text-lg font-bold text-cyan-600">{result.summary?.pv || 0}</div>
+                  <div className="text-lg font-bold text-cyan-600">{result.summary?.pv ?? "—"}</div>
                   <div className="text-xs text-muted-foreground">浏览量</div>
                 </div>
                 <div className="p-3 bg-red-50 rounded text-center">

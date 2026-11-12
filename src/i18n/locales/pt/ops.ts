@@ -50,4 +50,7 @@ export const ptOps = {
   "admin.import.warnings_title": "Avisos:",
   "admin.import.row_warning": "Linha {row}: {warning}",
   "checkout_result.body_other": "Abra seus pedidos para ver o status mais recente de pagamento e entrega.",
+  "admin.security_not_enforced": "Ainda não ativo: estas opções são guardadas, mas nada no sistema as lê. HTTPS e limite de pedidos são aplicados pelo nginx; autenticação de dois fatores e tempo limite de sessão não estão implementados.",
+  "common.go_to_page": "Ir para a página",
+  "common.go": "Ir",
 } as const satisfies Record<keyof typeof enOps, string>;

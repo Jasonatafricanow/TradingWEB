@@ -48,4 +48,7 @@ export const enOps = {
   "admin.import.warnings_title": "Warnings:",
   "admin.import.row_warning": "Row {row}: {warning}",
   "checkout_result.body_other": "Open your orders to review the latest payment and fulfillment status.",
+  "admin.security_not_enforced": "Not active yet: these options are saved but nothing in the system reads them. HTTPS and rate limiting are enforced by nginx; two-factor sign-in and session timeout are not implemented.",
+  "common.go_to_page": "Go to page",
+  "common.go": "Go",
 } as const;
