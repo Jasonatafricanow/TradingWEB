@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { parsePosTaxRateBps } from "@/services/admin/pos-store-config";
+import type { PosCheckoutRequestV1, PosOrderDto } from "@/services/admin/pos-contracts";
 import Link from "next/link";
 import { apiFetch } from "@/lib/client-api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -51,6 +53,23 @@ function lineKey(item: { product_id: string; variant_id: string | null }) {
 }
 
 export default function PosPage() {
+  const [operatorId, setOperatorId] = useState("");
+  const [pin, setPin] = useState("");
+  const [operatorToken, setOperatorToken] = useState("");
+  const [deviceId, setDeviceId] = useState("");
+  const [bootstrap, setBootstrap] = useState<{ currency: string; tax_rate: string; pricing_version: string; payment_methods: Array<{ code: string; label: string }> } | null>(null);
+  const [shiftId, setShiftId] = useState<string | null>(null);
+  const [cashCount, setCashCount] = useState("0.00");
+  const [managerId, setManagerId] = useState("");
+  const [managerPin, setManagerPin] = useState("");
+  const [approvalHash, setApprovalHash] = useState<string | null>(null);
+  const pendingRequest = useRef<PosCheckoutRequestV1 | null>(null);
+  const [sessionBusy, setSessionBusy] = useState(false);
+  useEffect(() => {
+    let id = localStorage.getItem("pos_device_id");
+    if (!id) { id = crypto.randomUUID(); localStorage.setItem("pos_device_id", id); }
+    setDeviceId(id);
+  }, []);
   const [stores, setStores] = useState<StoreOption[]>([]);
   const [storeId, setStoreId] = useState<string>("");
   const [query, setQuery] = useState("");
@@ -76,6 +95,53 @@ export default function PosPage() {
       })
       .catch(() => toast.error("门店列表加载失败"));
   }, []);
+
+  useEffect(() => {
+    setOperatorToken(""); setBootstrap(null); setShiftId(null); setApprovalHash(null); pendingRequest.current = null;
+    setCart([]); setResults([]);
+    if (!storeId) return;
+    let current = true;
+    apiFetch(`/api/admin/pos/bootstrap?store_id=${encodeURIComponent(storeId)}`).then(async response => {
+      const json = await response.json();
+      if (!response.ok) throw new Error(json.error?.message || "门店配置加载失败");
+      if (current) { setBootstrap(json.data); setPaymentMethod(json.data.payment_methods[0]?.code || "cash"); }
+    }).catch(error => { if (current) toast.error(error.message); });
+    return () => { current = false; };
+  }, [storeId]);
+
+  const posHeaders = (token = operatorToken) => ({ "X-POS-Operator-Session": token, "X-POS-Device-ID": deviceId });
+  const apiData = async (path: string, body?: unknown, token = operatorToken) => {
+    const response = await apiFetch(path, { method: body ? "POST" : "GET", headers: posHeaders(token), ...(body ? { body: JSON.stringify(body) } : {}) });
+    const json = await response.json();
+    if (!response.ok) throw new Error(json.error?.message || json.error || "请求失败");
+    return json.data;
+  };
+  const startOperator = async () => {
+    if (sessionBusy) return;
+    setSessionBusy(true);
+    try {
+      const session = await apiData("/api/admin/pos/operator-sessions", { staff_id: operatorId.trim(), store_id: storeId, device_id: deviceId, pin });
+      setOperatorId(session.operator.staffId); setOperatorToken(session.token);
+      const shift = await apiData("/api/admin/pos/shifts/current", undefined, session.token);
+      setShiftId(shift?.id || null); toast.success("操作员已验证");
+    } catch (error) { toast.error(error instanceof Error ? error.message : "登录失败"); }
+    finally { setPin(""); setSessionBusy(false); }
+  };
+  const changeShift = async () => {
+    if (sessionBusy) return;
+    if (!/^\d+(\.\d{1,2})?$/.test(cashCount)) { toast.error("请输入有效现金金额"); return; }
+    setSessionBusy(true);
+    try {
+      if (shiftId) {
+        const closed = await apiData(`/api/admin/pos/shifts/${shiftId}/close`, { counted_cash: Number(cashCount).toFixed(2), idempotency_key: `web-close-${shiftId}` });
+        toast.success(`已交班，现金差额 ${closed.difference_cash}`); setShiftId(null);
+      } else {
+        const opened = await apiData("/api/admin/pos/shifts", { opening_float: Number(cashCount).toFixed(2) });
+        setShiftId(opened.id); toast.success("已开班");
+      }
+    } catch (error) { toast.error(error instanceof Error ? error.message : "班次操作失败"); }
+    finally { setSessionBusy(false); }
+  };
 
   const runSearch = useCallback(async (q: string, sid: string) => {
     if (!q.trim()) { setResults([]); return; }
@@ -123,39 +189,53 @@ export default function PosPage() {
     );
   };
 
-  const subtotal = cart.reduce((s, l) => s + l.price * l.quantity, 0);
+  const subtotal = cart.reduce((s, l) => s + Math.round(l.price * 100) * l.quantity, 0) / 100;
   const discountNum = Math.max(0, Number(discount) || 0);
-  const total = Math.max(0, subtotal - discountNum);
+  const tax = Math.round(Math.max(0, Math.round(subtotal * 100) - Math.round(discountNum * 100)) * parsePosTaxRateBps(bootstrap?.tax_rate) / 10000) / 100;
+  const total = Math.max(0, subtotal - discountNum) + tax;
 
+  const submitCheckout = async (request: PosCheckoutRequestV1) => {
+    const res = await apiFetch("/api/admin/pos/checkout", { method: "POST", headers: posHeaders(), body: JSON.stringify(request) });
+    const json = await res.json();
+    if (!res.ok) {
+      if (json.error?.code === "DISCOUNT_APPROVAL_REQUIRED") { setApprovalHash(json.error.details.resource_hash); return; }
+      throw new Error(json.error?.message || "结账失败，请核对服务端报价和支付金额");
+    }
+    const order = json.data as PosOrderDto;
+    setReceipt({ order_no: order.order_no, created_at: order.created_at, store: { id: storeId, name: stores.find(store => store.id === storeId)?.name || storeId },
+      items: order.items.map(item => ({ title: item.name, sku: item.sku, quantity: item.quantity, unit_price: item.unit_price, subtotal: (Number(item.unit_price) * item.quantity).toFixed(2) })),
+      subtotal: order.subtotal, discount_amount: order.discount_total, total_amount: order.total, currency: request.currency, payment_method: request.payments[0].label, customer_phone: null });
+    pendingRequest.current = null; setApprovalHash(null); setCart([]); setCustomerPhone(""); setDiscount("");
+    toast.success(`订单 ${order.order_no} 已完成`);
+  };
   const doCheckout = async () => {
-    if (!storeId) { toast.error("请先选择门店"); return; }
-    if (cart.length === 0) { toast.error("购物车为空"); return; }
-    if (discountNum > subtotal) { toast.error("折扣不能超过小计"); return; }
+    if (checkingOut) return;
+    if (!operatorToken || !bootstrap || !shiftId) { toast.error("请先验证操作员并开班"); return; }
+    if (!cart.length || total <= 0 || discountNum > subtotal) { toast.error("请核对商品和应付金额"); return; }
     setCheckingOut(true);
     try {
-      const res = await apiFetch("/api/admin/pos/checkout", {
-        method: "POST",
-        body: JSON.stringify({
-          store_id: storeId,
-          items: cart.map((l) => ({ product_id: l.product_id, variant_id: l.variant_id, quantity: l.quantity })),
-          payment_method: paymentMethod,
-          customer_phone: customerPhone.trim() || undefined,
-          discount_amount: discountNum || undefined,
-        }),
-      });
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok || json.error) throw new Error(json.error || "结账失败");
-      setReceipt(json.data);
-      setCart([]);
-      setCustomerPhone("");
-      setDiscount("");
-      toast.success(`订单 ${json.data.order_no} 已完成`);
-    } catch (err) {
-      // 强一致:后端已整体回滚,这里只报错,不产生半成品订单
-      toast.error(err instanceof Error ? err.message : "结账失败");
-    } finally {
-      setCheckingOut(false);
-    }
+      const payload = { store_id: storeId, staff_id: operatorId, customer_id: null, currency: bootstrap.currency, note: null,
+        fulfillment: { method: "in_store" as const }, items: cart.map(line => ({ product_id: line.product_id, variant_id: line.variant_id, quantity: line.quantity, line_discount: "0.00" })),
+        order_discount: discountNum.toFixed(2), pricing_preview: { subtotal: subtotal.toFixed(2), discount: discountNum.toFixed(2), tax: tax.toFixed(2), total: total.toFixed(2) }, pricing_version: bootstrap.pricing_version,
+        payments: [{ method: paymentMethod, label: bootstrap.payment_methods.find(method => method.code === paymentMethod)?.label || paymentMethod, amount: total.toFixed(2), reference: null }] };
+      if (pendingRequest.current) {
+        const { idempotency_key: _key, approval_token: _token, ...previous } = pendingRequest.current;
+        if (JSON.stringify(previous) !== JSON.stringify(payload)) pendingRequest.current = null;
+      }
+      pendingRequest.current ??= { ...payload, idempotency_key: crypto.randomUUID() };
+      await submitCheckout(pendingRequest.current);
+    } catch (error) { toast.error(error instanceof Error ? error.message : "结账失败"); }
+    finally { setCheckingOut(false); }
+  };
+  const approveDiscount = async () => {
+    if (!pendingRequest.current || !approvalHash || checkingOut) return;
+    setCheckingOut(true);
+    try {
+      const manager = await apiData("/api/admin/pos/operator-sessions", { staff_id: managerId.trim(), store_id: storeId, device_id: deviceId, pin: managerPin });
+      const approval = await apiData("/api/admin/pos/approvals", { store_id: storeId, operation: "checkout_discount", resource_hash: approvalHash }, manager.token);
+      await submitCheckout({ ...pendingRequest.current, approval_token: approval.token });
+    } catch (error) { toast.error(error instanceof Error ? error.message : "审批失败"); }
+    finally { setManagerPin(""); setCheckingOut(false); }
   };
 
   // ── 小票视图 ──
@@ -223,6 +303,7 @@ export default function PosPage() {
             <Link href="/admin/pos/report" className="text-sm text-blue-600 hover:underline shrink-0">日结报表</Link>
             <Storefront className="h-4 w-4 text-gray-500" />
             <Select
+              disabled={checkingOut || sessionBusy}
               value={storeId || "__none__"}
               onValueChange={(v) => {
                 const sid = v === "__none__" ? "" : v;
@@ -242,6 +323,25 @@ export default function PosPage() {
         }
       />
 
+      <Card className="mb-4"><CardContent className="pt-4 space-y-3">
+        {!operatorToken ? <div className="flex gap-2">
+          <Input placeholder="操作员员工 ID" value={operatorId} onChange={e => setOperatorId(e.target.value)} />
+          <Input placeholder="操作员 PIN" type="password" value={pin} onChange={e => setPin(e.target.value)} autoComplete="off" />
+          <Button disabled={!storeId || !bootstrap || sessionBusy} onClick={startOperator}>验证操作员</Button>
+        </div> : <div className="flex items-center gap-2">
+          <span className="text-sm">操作员 {operatorId} · {shiftId ? "已开班" : "未开班"}</span>
+          <Input className="w-40" aria-label={shiftId ? "交班实点现金" : "开班备用金"} value={cashCount} onChange={e => setCashCount(e.target.value)} />
+          <Button disabled={sessionBusy || checkingOut} onClick={changeShift}>{shiftId ? "确认交班" : "开班"}</Button>
+          <Button variant="outline" onClick={() => setOperatorToken("")}>切换操作员</Button>
+        </div>}
+        {approvalHash && <div className="space-y-2">
+          <p className="text-sm">该折扣需要另一位同店经理审批。</p>
+          <Input placeholder="经理员工 ID" value={managerId} onChange={e => setManagerId(e.target.value)} />
+          <Input placeholder="经理 PIN" type="password" value={managerPin} onChange={e => setManagerPin(e.target.value)} autoComplete="off" />
+          <Button disabled={checkingOut} onClick={approveDiscount}>审批并完成原交易</Button>
+          <Button variant="outline" disabled={checkingOut} onClick={() => setApprovalHash(null)}>取消审批</Button>
+        </div>}
+      </CardContent></Card>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* 左:搜索 */}
         <Card>
@@ -344,7 +444,7 @@ export default function PosPage() {
             </div>
 
             <div className="flex gap-2">
-              {Object.entries(PAYMENT_LABELS).map(([code, label]) => (
+              {(bootstrap?.payment_methods || []).map(({code, label}) => (
                 <Button
                   key={code}
                   variant={paymentMethod === code ? "default" : "outline"}
@@ -362,12 +462,13 @@ export default function PosPage() {
               {discountNum > 0 && (
                 <div className="flex justify-between text-gray-500"><span>折扣</span><span>-${discountNum.toFixed(2)}</span></div>
               )}
+              <div className="flex justify-between text-gray-500"><span>税费</span><span>{tax.toFixed(2)} {bootstrap?.currency}</span></div>
               <div className="flex justify-between font-bold text-lg"><span>应收</span><span>${total.toFixed(2)}</span></div>
             </div>
 
             <Button
               className="w-full py-6 text-lg"
-              disabled={checkingOut || cart.length === 0 || !storeId}
+              disabled={checkingOut || cart.length === 0 || !operatorToken || !shiftId || Boolean(approvalHash)}
               onClick={doCheckout}
             >
               {checkingOut ? "结账中..." : `收款 $${total.toFixed(2)}`}
