@@ -48,6 +48,8 @@ function dependencies() {
     runIdempotent: vi.fn(async (_key, work) => work()),
     transaction: vi.fn(async (work) => work(tx)),
     findOpenShiftId: vi.fn().mockResolvedValue("shift-1"),
+    loadTenderBasis: vi.fn().mockResolvedValue({ paid: [{ method: "cash", label: "Cash", amountCents: 1000 }], refundedByMethod: new Map(), legacyMethod: "cash" }),
+    insertRefundTenders: vi.fn(async () => { events.push("tenders"); }),
     getStore: vi.fn().mockResolvedValue({ id: "store-1", name: "Main", status: "active", currency: "USD", taxRateBps: 0, pricingVersion: "pricing-v1", paymentMethods: ["cash"] }),
     consumeApprovalToken: vi.fn(async () => { events.push("approval"); return "manager-1"; }),
     lockOriginalOrder: vi.fn(async () => { events.push("order-lock"); return { id: "order-old", storeId: "store-1", source: "pos", status: "completed", total: "10.00", refundedTotal: "0.00", currency: "USD" }; }),
@@ -90,8 +92,46 @@ describe("exchangePosOrder", () => {
     expect(deps.enqueueAuditEvent).toHaveBeenCalledWith(tx, expect.objectContaining({
       eventType: "pos.exchange.completed", entityType: "exchange", entityId: "exchange-row-1", storeId: "store-1",
     }));
-    expect(events).toEqual(["approval", "order-lock", "item-lock", "restock", "replacement", "deduct", "payment", "refund", "exchange", "return-item", "update-old", "timeline", "timeline", "outbox"]);
+    expect(events).toEqual(["approval", "order-lock", "item-lock", "restock", "replacement", "deduct", "payment", "refund", "exchange", "return-item", "tenders", "update-old", "timeline", "timeline", "outbox"]);
     expect(result).toMatchObject({ exchange_id: "exchange-row-1", refund_amount: "10.00", new_order_amount: "12.00", difference_amount: "2.00", replacement_order: { id: "order-new" } });
+  });
+
+  it("refunds a negative difference through the original tenders and reports it", async () => {
+    const { deps } = dependencies();
+    deps.priceReplacement.mockResolvedValue({ ...(await deps.priceReplacement.getMockImplementation()!({} as never, 0, {} as never)), subtotal: "4.00", total: "4.00" });
+    const input = request();
+    input.replacement.pricing_preview = { subtotal: "4.00", discount: "0.00", tax: "0.00", total: "4.00" };
+    input.replacement.payments = [{ method: "cash", label: "Cash", amount: "4.00", reference: null }];
+    input.difference_payment = [];
+    const result = await exchangePosOrder(input, deps as never);
+    expect(result.difference_amount).toBe("-6.00");
+    expect(result.refund_tenders).toEqual([{ method: "cash", label: "Cash", amount: "6.00" }]);
+    expect(deps.insertRefundTenders).toHaveBeenCalledWith(expect.objectContaining({ refundId: "refund-row-1", tenders: result.refund_tenders }), expect.anything());
+  });
+
+  it("moves no money on a zero difference", async () => {
+    const { deps } = dependencies();
+    deps.priceReplacement.mockResolvedValue({ ...(await deps.priceReplacement.getMockImplementation()!({} as never, 0, {} as never)), subtotal: "10.00", total: "10.00" });
+    const input = request();
+    input.replacement.pricing_preview = { subtotal: "10.00", discount: "0.00", tax: "0.00", total: "10.00" };
+    input.replacement.payments = [{ method: "cash", label: "Cash", amount: "10.00", reference: null }];
+    input.difference_payment = [];
+    deps.findOpenShiftId.mockResolvedValue(null);
+    const result = await exchangePosOrder(input, deps as never);
+    expect(result).toMatchObject({ difference_amount: "0.00", refund_tenders: [] });
+    expect(deps.insertRefundTenders).toHaveBeenCalledWith(expect.objectContaining({ tenders: [] }), expect.anything());
+    expect(deps.enqueueAuditEvent).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      payload: expect.objectContaining({ cash_outside_shift: false }),
+    }));
+  });
+
+  it("flags a cash difference taken without an open shift", async () => {
+    const { deps } = dependencies();
+    deps.findOpenShiftId.mockResolvedValue(null);
+    await exchangePosOrder(request(), deps as never);
+    expect(deps.enqueueAuditEvent).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      payload: expect.objectContaining({ cash_outside_shift: true }),
+    }));
   });
 
   it("rejects a duplicate returned quantity before any stock or order write", async () => {

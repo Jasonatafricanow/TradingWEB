@@ -227,6 +227,24 @@ export const orders = mysqlTable(
 	]
 );
 
+// POS refund tenders (TW-10): how a refund was paid back, per method.
+export const posRefundTenders = mysqlTable(
+	"pos_refund_tenders",
+	{
+		id: varchar("id", { length: 36 }).primaryKey(),
+		refund_id: varchar("refund_id", { length: 36 }).notNull(),
+		order_id: varchar("order_id", { length: 36 }).notNull(),
+		method: varchar("method", { length: 64 }).notNull(),
+		label: varchar("label", { length: 100 }).notNull(),
+		amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
+		created_at: timestamp("created_at").defaultNow().notNull(),
+	},
+	(table) => [
+		index("pos_refund_tenders_refund_idx").on(table.refund_id),
+		index("pos_refund_tenders_order_idx").on(table.order_id),
+	]
+);
+
 export const orderPayments = mysqlTable(
 	"order_payments",
 	{

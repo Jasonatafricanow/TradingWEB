@@ -1,4 +1,5 @@
 import { posTransaction } from "./pos-idempotency-service";
+import { allocateRefundTenders, cashCents, cashOutsideShift, type RefundTender } from './pos-refund-tenders';
 import { randomUUID } from 'node:crypto';
 
 import { asc, eq } from 'drizzle-orm';
@@ -41,6 +42,12 @@ export interface PosExchangeResult {
   refund_amount: string;
   new_order_amount: string;
   difference_amount: string;
+  /**
+   * Money handed back when the returned goods are worth more than the
+   * replacement (negative difference), per original tender. Empty for a
+   * zero or positive difference.
+   */
+  refund_tenders: RefundTender[];
 }
 
 interface CreateReplacementInput {
@@ -289,6 +296,13 @@ export async function exchangePosOrder(
         difference_amount: formatCents(differenceCents),
       });
     }
+    // Difference rules (TW-10):
+    //   > 0  customer pays the difference (difference_payment must match)
+    //   = 0  no money moves; the return fully pays the replacement
+    //   < 0  the surplus is refunded through the original tenders
+    // Cash without an open shift is allowed (as on mobile) but flagged in the audit event.
+    const surplusCents = Math.max(0, -differenceCents);
+    const surplusTenders = allocateRefundTenders(surplusCents, await dependencies.loadTenderBasis(prepared.order, tx));
     const creditCents = Math.min(parseMoneyToCents(prepared.amount), parseMoneyToCents(priced.total));
     const actualPayments: PosPaymentInput[] = [
       ...(creditCents > 0 ? [{ method: 'exchange_credit', label: 'Exchange credit', amount: formatCents(creditCents), reference: input.original_order_id }] : []),
@@ -351,6 +365,7 @@ export async function exchangePosOrder(
         restock: line.input.restock, createdAt: now,
       }, tx);
     }
+    await dependencies.insertRefundTenders({ refundId, orderId: prepared.order.id, tenders: surplusTenders, createdAt: now }, tx);
     await dependencies.updateOriginalOrder({
       orderId: prepared.order.id,
       refundedTotal: prepared.refundedTotal,
@@ -377,6 +392,8 @@ export async function exchangePosOrder(
         refund_amount: prepared.amount,
         difference_amount: formatCents(differenceCents),
         shift_id: shiftId,
+        refund_tenders: surplusTenders,
+        cash_outside_shift: cashOutsideShift(shiftId, cashCents(surplusTenders) + cashCents(input.difference_payment)),
       },
     });
     return {
@@ -386,6 +403,7 @@ export async function exchangePosOrder(
       refund_amount: prepared.amount,
       new_order_amount: priced.total,
       difference_amount: formatCents(differenceCents),
+      refund_tenders: surplusTenders,
     };
   }), {
     responseStatus: 201,

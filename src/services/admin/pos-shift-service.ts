@@ -1,7 +1,7 @@
 import { posTransaction } from "./pos-idempotency-service";
 import { randomUUID } from "node:crypto";
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
 import { formatCents, parseMoneyToCents } from "@/services/orders/order-money";
@@ -93,17 +93,33 @@ function toShiftRecord(row: typeof posShifts.$inferSelect): PosShiftRecord {
   };
 }
 
-export function sumUnambiguousCashRefunds(
-  entries: Array<{ amount: string; orderPaymentMethod: string | null; isExchangeAccounting?: boolean }>,
-): number {
-  return entries.reduce((sum, entry) => entry.orderPaymentMethod === "cash" && !entry.isExchangeAccounting
-    ? sum + parseMoneyToCents(entry.amount)
-    : sum, 0);
+type RefundCashEntry = {
+  amount: string;
+  orderPaymentMethod: string | null;
+  isExchangeAccounting?: boolean;
+  /** Cash recorded in pos_refund_tenders for this refund; null when the refund predates tender rows. */
+  tenderCash?: string | null;
+  hasTenders?: boolean;
+};
+
+/**
+ * Cash that left the drawer for refunds. Refunds with tender rows count
+ * exactly their cash tenders (split sales, exchange surpluses). Older
+ * refunds keep the previous rule: whole amount for cash-only sales,
+ * nothing for exchanges or split sales.
+ */
+export function sumUnambiguousCashRefunds(entries: RefundCashEntry[]): number {
+  return entries.reduce((sum, entry) => {
+    if (entry.hasTenders) return sum + parseMoneyToCents(entry.tenderCash ?? "0");
+    return entry.orderPaymentMethod === "cash" && !entry.isExchangeAccounting
+      ? sum + parseMoneyToCents(entry.amount)
+      : sum;
+  }, 0);
 }
 
 export function reconcileCashEntries(input: {
   payments: Array<{ method: string; amount: string }>;
-  refunds: Array<{ amount: string; orderPaymentMethod: string | null; isExchangeAccounting?: boolean }>;
+  refunds: RefundCashEntry[];
   movements: Array<{ kind: string; amount: string }>;
 }): PosCashReconciliation {
   return {
@@ -197,6 +213,8 @@ const databaseShiftDependencies: PosShiftDependencies = {
       amount: refunds.amount,
       orderPaymentMethod: orders.payment_method,
       exchangeId: posExchanges.id,
+      tenderCount: sql<number>`(SELECT COUNT(*) FROM pos_refund_tenders t WHERE t.refund_id = ${refunds.id})`,
+      tenderCash: sql<string>`(SELECT COALESCE(SUM(t.amount), 0) FROM pos_refund_tenders t WHERE t.refund_id = ${refunds.id} AND t.method = 'cash')`,
     }).from(refunds)
       .innerJoin(orders, eq(refunds.order_id, orders.id))
       .leftJoin(posExchanges, eq(posExchanges.refund_id, refunds.id))
@@ -212,6 +230,8 @@ const databaseShiftDependencies: PosShiftDependencies = {
         amount: row.amount,
         orderPaymentMethod: row.orderPaymentMethod,
         isExchangeAccounting: row.exchangeId !== null,
+        hasTenders: Number(row.tenderCount) > 0,
+        tenderCash: row.tenderCash === null ? null : String(row.tenderCash),
       })),
       movements,
     });

@@ -19,6 +19,10 @@ import { runIdempotent, type IdempotencyCompletion, type IdempotencyInput } from
 import type { PosOperatorContext } from './pos-operator-session-service';
 import { enqueuePosAuditEvent, type EnqueuePosAuditEvent } from './pos-audit-outbox-service';
 import { findOpenShiftId } from './pos-shift-service';
+import {
+  allocateRefundTenders, cashCents, cashOutsideShift, insertRefundTenders, loadRefundTenderBasis,
+  type RefundTender, type RefundTenderBasis,
+} from './pos-refund-tenders';
 import { restoreInventory } from '@/services/inventory/inventory-allocation-service';
 import { RefundStatus, isRefundStatus } from '@/lib/enums';
 import { TIMELINE_MESSAGES } from "@/lib/api-messages";
@@ -308,6 +312,7 @@ export interface PosOriginalOrder {
   total: string;
   refundedTotal: string;
   currency: string;
+  paymentMethod?: string | null;
 }
 
 export interface PosOriginalItem {
@@ -334,6 +339,8 @@ export interface PosRefundResult {
   amount: string;
   refunded_total: string;
   items: PosReturnItemInput[];
+  /** What to hand back, per tender (TW-10). */
+  refund_tenders: RefundTender[];
 }
 
 export interface PreparedPosReturn {
@@ -357,6 +364,8 @@ export interface PosReturnDependencies {
   updateOriginalOrder(input: { orderId: string; refundedTotal: string; fullyRefunded: boolean }, tx: DbTx): Promise<void>;
   insertTimeline(input: Record<string, unknown>, tx: DbTx): Promise<void>;
   findOpenShiftId(storeId: string, tx: DbTx): Promise<string | null>;
+  loadTenderBasis(order: PosOriginalOrder, tx: DbTx): Promise<RefundTenderBasis>;
+  insertRefundTenders(input: { refundId: string; orderId: string; tenders: RefundTender[]; createdAt: Date }, tx: DbTx): Promise<void>;
   enqueueAuditEvent: EnqueuePosAuditEvent;
   newId(): string;
   now(): Date;
@@ -457,6 +466,8 @@ const databasePosReturnDependencies: PosRefundDependencies = {
   runIdempotent,
   transaction: (work) => posTransaction(work),
   findOpenShiftId,
+  loadTenderBasis: (order, tx) => loadRefundTenderBasis(order.id, order.paymentMethod ?? null, tx),
+  insertRefundTenders,
   enqueueAuditEvent: enqueuePosAuditEvent,
   consumeApprovalToken,
   async lockOriginalOrder(orderId, tx) {
@@ -468,6 +479,7 @@ const databasePosReturnDependencies: PosRefundDependencies = {
       total: orders.total_amount,
       refundedTotal: orders.refunded_total,
       currency: orders.currency,
+      paymentMethod: orders.payment_method,
     }).from(orders).where(eq(orders.id, orderId)).for('update').limit(1);
     return order ?? null;
   },
@@ -576,6 +588,7 @@ export async function refundPosOrder(
     }, dependencies, tx);
     const refundId = dependencies.newId();
     const shiftId = await dependencies.findOpenShiftId(input.store_id, tx);
+    const tenders = allocateRefundTenders(parseMoneyToCents(prepared.amount), await dependencies.loadTenderBasis(prepared.order, tx));
     for (const line of prepared.requested) {
       if (line.input.restock) {
         await dependencies.restockReturn(line.item, line.input.quantity, input.store_id, input.operator.staffId, refundId, tx);
@@ -604,6 +617,7 @@ export async function refundPosOrder(
         createdAt: now,
       }, tx);
     }
+    await dependencies.insertRefundTenders({ refundId, orderId: prepared.order.id, tenders, createdAt: now }, tx);
     await dependencies.updateOriginalOrder({
       orderId: prepared.order.id,
       refundedTotal: prepared.refundedTotal,
@@ -624,7 +638,8 @@ export async function refundPosOrder(
       entityId: refundId,
       storeId: input.store_id,
       operatorId: input.operator.staffId,
-      payload: { order_id: prepared.order.id, amount: prepared.amount, shift_id: shiftId },
+      payload: { order_id: prepared.order.id, amount: prepared.amount, shift_id: shiftId, tenders,
+        cash_outside_shift: cashOutsideShift(shiftId, cashCents(tenders)) },
     });
     return {
       refund_id: refundId,
@@ -632,6 +647,7 @@ export async function refundPosOrder(
       amount: prepared.amount,
       refunded_total: prepared.refundedTotal,
       items: input.return_items,
+      refund_tenders: tenders,
     };
   }), {
     responseStatus: 201,
