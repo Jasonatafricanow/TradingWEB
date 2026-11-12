@@ -276,7 +276,7 @@ NEXT_PUBLIC_SITE_URL=https://example.com
 - `0004_add_seo_meta_fields.sql` 逐列检查再 add
 - 执行后核对 Drizzle migration metadata 与 MySQL 实际 schema 一致
 
-### 0034–0037 必须先于代码上线
+### 0034–0039 必须先于代码上线
 
 以下表和列被新代码在主链路上直接读写，代码先上线会导致对应功能整体失败：
 
@@ -286,7 +286,16 @@ NEXT_PUBLIC_SITE_URL=https://example.com
 | `0035_order_stock_allocations` | `order_stock_allocations` | 结账扣库存、退货回补失败 |
 | `0036_revoked_sessions` | `revoked_sessions` | 每个带登录态的请求都查此表，缺表时全站鉴权 500 |
 | `0037_email_outbox_notification_dedupe` | `email_logs` 新增 body/dedupe_key 等列，`notifications.dedupe_key` | 邮件写日志失败；付款事务里的通知和确认邮件被跳过（付款本身不受影响，只记错误日志） |
+| `0038_pos_refund_tenders` | `pos_refund_tenders` | POS 退款、换货写退款方式失败（整笔回滚）；交班对账查询失败 |
+| `0039_relax_legacy_stock_transfer_columns` | `stock_transfers.product_id/quantity` 改为可空 | 严格模式下新建调拨一律失败（不跑也是现状：线上如能建调拨，说明这两列已可空，0039 会自动跳过） |
 
 发布顺序：先在线上 `SHOW TABLES` 确认前三张表不存在，`DESC email_logs` / `DESC notifications` 看现有列 → 执行迁移 → 再发布代码。
-0037 每一步都先查 information_schema，列或索引已存在就跳过；如果线上 `email_logs` 用的不是 `to_email` 列（例如历史上手工建成 `recipient`），先停下核对，不要直接跑。
+上线前先在一次性库上全量重放（本地已用 MySQL 8.4 跑通 0000→0039）：
+
+```bash
+MIGRATION_RECONCILIATION_ALLOW_DISPOSABLE_DB=1 DB_NAME=tw_replay_check DB_HOST=… DB_USER=… DB_PASSWORD=… \
+  pnpm tsx scripts/migration-reconciliation/integration/replay-latest.ts
+```
+
+0037、0039 每一步都先查 information_schema，已满足就跳过；如果线上 `email_logs` 用的不是 `to_email` 列（例如历史上手工建成 `recipient`），先停下核对，不要直接跑。
 `0008` 的 journal 断档与这三项无关，仍按「需线上 DESC 确认」处理，不要顺带补跑。
