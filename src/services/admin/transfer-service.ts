@@ -306,6 +306,15 @@ function validateItems(items: CreateTransferParams["items"]): TransferItemFact[]
   });
 }
 
+/** Store-bound staff may only act on transfers touching their own store; admin passes no scope. */
+export interface TransferActorScope { storeId: string }
+
+function assertScope(scope: TransferActorScope | undefined, allowedStoreIds: Array<string | null>) {
+  if (scope && !allowedStoreIds.includes(scope.storeId)) {
+    throw new TransferServiceError("LOCATION_STORE_MISMATCH", "Transfer does not belong to your store", 403);
+  }
+}
+
 async function requireTransfer(id: string, expectedStatus: string, dependencies: TransferDependencies, tx: DbTx) {
   const transfer = await dependencies.lockTransfer(id, tx);
   if (!transfer) throw new TransferServiceError("TRANSFER_NOT_FOUND", "Transfer not found", 404);
@@ -402,10 +411,12 @@ export async function approveTransfer(
   transferId: string,
   operatorId: string,
   dependencies: TransferDependencies = databaseTransferDependencies,
+  scope?: TransferActorScope,
 ): Promise<void> {
   await dependencies.transaction(async (tx) => {
     const transfer = await requireTransfer(transferId, "pending", dependencies, tx);
     const sourceStoreId = transfer.storeId ?? await dependencies.resolveStoreIdForWarehouse(transfer.fromWarehouseId, tx);
+    assertScope(scope, [sourceStoreId]);
     const items = await dependencies.listItems(transferId, tx);
     if (items.length === 0) throw new TransferServiceError("TRANSFER_ITEMS_REQUIRED", "Transfer has no items", 409);
     for (const item of items) {
@@ -448,10 +459,15 @@ export async function completeTransfer(
   transferId: string,
   operatorId: string,
   dependencies: TransferDependencies = databaseTransferDependencies,
+  scope?: TransferActorScope,
 ): Promise<void> {
   await dependencies.transaction(async (tx) => {
     const transfer = await requireTransfer(transferId, "in_transit", dependencies, tx);
     const destinationStoreId = await dependencies.resolveStoreIdForWarehouse(transfer.toWarehouseId, tx);
+    if (scope) {
+      const sourceStoreId = transfer.storeId ?? await dependencies.resolveStoreIdForWarehouse(transfer.fromWarehouseId, tx);
+      assertScope(scope, [sourceStoreId, destinationStoreId]);
+    }
     const items = await dependencies.listItems(transferId, tx);
     if (items.length === 0) throw new TransferServiceError("TRANSFER_ITEMS_REQUIRED", "Transfer has no items", 409);
     for (const item of items) {
@@ -483,6 +499,7 @@ export async function cancelTransfer(
   transferId: string,
   operatorId: string,
   dependencies: TransferDependencies = databaseTransferDependencies,
+  scope?: TransferActorScope,
 ): Promise<void> {
   await dependencies.transaction(async (tx) => {
     const transfer = await dependencies.lockTransfer(transferId, tx);
@@ -490,6 +507,7 @@ export async function cancelTransfer(
     if (transfer.status !== "pending" && transfer.status !== "in_transit") {
       throw new TransferServiceError("TRANSFER_STATE_CONFLICT", `Transfer is ${transfer.status}`, 409);
     }
+    if (scope) assertScope(scope, [transfer.storeId ?? await dependencies.resolveStoreIdForWarehouse(transfer.fromWarehouseId, tx)]);
     if (transfer.status === "in_transit") {
       const sourceStoreId = transfer.storeId ?? await dependencies.resolveStoreIdForWarehouse(transfer.fromWarehouseId, tx);
       const items = await dependencies.listItems(transferId, tx);

@@ -176,4 +176,20 @@ describe("transfer service transaction boundary", () => {
     expect(headers.get("transfer-1")?.status).toBe("in_transit");
     expect(inventory.get("store-1|warehouse-1|product-1|")?.stock).toBe(3);
   });
+
+  it("confines store-bound staff to transfers that touch their own store", async () => {
+    const { deps, headers, inventory } = dependencies();
+    await createTransfer(createInput, deps);
+    await expect(approveTransfer("transfer-1", "manager-3", deps, { storeId: "store-3" }))
+      .rejects.toMatchObject({ code: "LOCATION_STORE_MISMATCH", status: 403 });
+    expect(headers.get("transfer-1")?.status).toBe("pending");
+    expect(inventory.get("store-1|warehouse-1|product-1|")?.stock).toBe(5);
+
+    await approveTransfer("transfer-1", "manager-1", deps, { storeId: "store-1" });
+    await expect(cancelTransfer("transfer-1", "manager-3", deps, { storeId: "store-3" }))
+      .rejects.toMatchObject({ code: "LOCATION_STORE_MISMATCH", status: 403 });
+    // The receiving store may confirm arrival.
+    await completeTransfer("transfer-1", "receiver-2", deps, { storeId: "store-2" });
+    expect(headers.get("transfer-1")?.status).toBe("completed");
+  });
 });
