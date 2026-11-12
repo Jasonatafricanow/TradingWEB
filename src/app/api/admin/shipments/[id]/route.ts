@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { requireUser, requireStaffRole, errorResponse } from "@/services/auth/auth-middleware"
+import { requireStaffRole, errorResponse } from "@/services/auth/auth-middleware"
 import { getShipment, updateShipment, addTrackingEvent } from "@/services/admin/shipment-service"
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -24,6 +24,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
+    await requireStaffRole(request, ["admin", "operator"]);
     const { id } = await params
     const body = await request.json()
     if (body.action === 'tracking_event') {

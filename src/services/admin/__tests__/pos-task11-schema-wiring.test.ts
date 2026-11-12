@@ -90,7 +90,7 @@ describe("Task 11 schema and service wiring", () => {
     expect(schema).toContain('generatedAlwaysAs(sql`COALESCE(variant_id, \'\')`');
     expect(schema).toContain('check("pos_purchase_orders_status_check"');
     expect(schema).toContain('check("pos_purchase_order_items_ordered_qty_check"');
-    expect(journal).toContain('"tag":  "0031_pos_purchase_orders"');
+    expect(JSON.parse(journal).entries.some((entry: { tag: string }) => entry.tag === "0031_pos_purchase_orders")).toBe(true);
   });
 
   it("makes inventory the only POS catalog and checkout stock truth", () => {
@@ -117,7 +117,8 @@ describe("Task 11 schema and service wiring", () => {
     expect(webOrder).not.toContain("variant.stock");
     expect(posRefund).toContain("restoreInventory(");
     expect(posRefund).not.toContain("productVariants.stock");
-    expect(legacyPos).toContain("allocateInventory(");
+    expect(legacyPos).toContain("status: 410");
+    expect(legacyPos).not.toContain("allocateInventory(");
     expect(legacyPos).not.toContain("productVariants.stock");
     expect(productView).not.toContain("SUM(pv.stock)");
   });

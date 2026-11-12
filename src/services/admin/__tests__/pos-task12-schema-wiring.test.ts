@@ -22,6 +22,6 @@ describe("Task 12 schema and route wiring", () => {
     expect(schema).toContain('index("orders_store_created_idx")');
     expect(schema).toContain('index("orders_customer_created_idx")');
     expect(schema).toContain('index("orders_pickup_status_idx")');
-    expect(journal).toContain('"tag":  "0032_pos_fulfillment"');
+    expect(JSON.parse(journal).entries.some((entry: { tag: string }) => entry.tag === "0032_pos_fulfillment")).toBe(true);
   });
 });

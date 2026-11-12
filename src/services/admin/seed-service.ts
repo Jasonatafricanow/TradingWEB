@@ -1,6 +1,5 @@
 ﻿import { db } from '@/lib/db';
-import { eq, ne } from 'drizzle-orm';
-import { products, categories, orders, inventory, coupons, refunds, conversations, messages } from '@/storage/database/shared/schema';
+import { products, categories, inventory } from '@/storage/database/shared/schema';
 import { randomUUID } from 'node:crypto';
 
 const DEMO_CATEGORIES = [
@@ -81,30 +80,6 @@ export async function seedDemoData() {
 }
 
 export async function clearDemoData() {
-  const tableNames = [
-    'inventory_transactions', 'inventory',
-    'order_items', 'orders',
-    'product_reviews', 'product_recommendations',
-    'wishlist_items',
-    'email_logs', 'abandoned_carts',
-    'audit_logs', 'page_views',
-    'stock_transfers', 'messages', 'conversations',
-    'refunds', 'coupons',
-    'user_memberships',
-  ];
-
-  // Use raw SQL for table-level deletes since these are dynamic table names
-  for (const table of tableNames) {
-    await db.$client.execute(`DELETE FROM ${table}`);
-  }
-
-  // 删除商品（保留分类）
-  await db.delete(products); // Delete all products
-
-  // 删除演示分类
-  for (const cat of DEMO_CATEGORIES) {
-    await db.delete(categories).where(eq(categories.name, cat.name));
-  }
-
-  return { cleared: true };
+  // Records lack reliable demo provenance; do not delete business data.
+  throw Object.assign(new Error('Demo cleanup is disabled: records lack reliable demo provenance'), { status: 403 });
 }
