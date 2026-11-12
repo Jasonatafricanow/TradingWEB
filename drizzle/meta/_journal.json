@@ -253,6 +253,13 @@
       "when": 1784937600000,
       "tag": "0036_revoked_sessions",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1785024000000,
+      "tag": "0037_email_outbox_notification_dedupe",
+      "breakpoints": true
     }
   ]
 }

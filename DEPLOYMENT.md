@@ -161,11 +161,22 @@ CRON_SECRET="<与 .env 一致的密钥>"
 ```
 
 ### 3.2 每日运营简报（/api/cron/daily-briefing）
-每天 08:00 执行，推送昨日订单/收入/异常摘要。
+每天 08:00 执行，推送昨日订单/收入/异常摘要。同一天同一收件人只发一封，调度器重复触发不会重发。
 
 ```bash
 0 8 * * * curl -s -X POST -H "x-cron-secret: $CRON_SECRET" "https://fjglobal.online/api/cron/daily-briefing"
 ```
+
+### 3.3 邮件发件箱重试（/api/cron/email-outbox）
+每 5 分钟执行。重试状态为 `queued` 的邮件（支付商限流/5xx、网络失败、付款提交后进程中断），以及卡在 `sending` 超过 10 分钟的邮件。
+每行邮件用自己的 ID 作为 Resend 幂等键，重试不会产生第二封；只处理 23 小时内的记录（幂等键有效期 24 小时）。
+
+```bash
+*/5 * * * * curl -s -X POST -H "x-cron-secret: $CRON_SECRET" "https://fjglobal.online/api/cron/email-outbox"
+```
+
+邮件状态含义：`queued` 待发送，`sending` 发送中，`sent` 支付商已接收（不代表收件人已收到），`failed` 未配置/被拒/重试耗尽。
+需要 `RESEND_API_KEY` 和 `EMAIL_FROM`；未配置时邮件记为 `failed: provider_not_configured`，不会显示为已发送。
 
 ---
 
@@ -250,15 +261,17 @@ NEXT_PUBLIC_SITE_URL=https://example.com
 - `0004_add_seo_meta_fields.sql` 逐列检查再 add
 - 执行后核对 Drizzle migration metadata 与 MySQL 实际 schema 一致
 
-### 0034–0036 必须先于代码上线
+### 0034–0037 必须先于代码上线
 
-以下三张表被新代码在主链路上直接读写，代码先上线会导致对应功能整体失败：
+以下表和列被新代码在主链路上直接读写，代码先上线会导致对应功能整体失败：
 
 | 迁移 | 表 | 代码缺表时的后果 |
 |---|---|---|
 | `0034_oauth_identities` | `oauth_identities` | Google / Apple 登录全部失败 |
 | `0035_order_stock_allocations` | `order_stock_allocations` | 结账扣库存、退货回补失败 |
 | `0036_revoked_sessions` | `revoked_sessions` | 每个带登录态的请求都查此表，缺表时全站鉴权 500 |
+| `0037_email_outbox_notification_dedupe` | `email_logs` 新增 body/dedupe_key 等列，`notifications.dedupe_key` | 邮件写日志失败；付款事务里的通知和确认邮件被跳过（付款本身不受影响，只记错误日志） |
 
-发布顺序：先在线上 `SHOW TABLES` 确认三张表不存在 → 执行迁移 → 再发布代码。
+发布顺序：先在线上 `SHOW TABLES` 确认前三张表不存在，`DESC email_logs` / `DESC notifications` 看现有列 → 执行迁移 → 再发布代码。
+0037 每一步都先查 information_schema，列或索引已存在就跳过；如果线上 `email_logs` 用的不是 `to_email` 列（例如历史上手工建成 `recipient`），先停下核对，不要直接跑。
 `0008` 的 journal 断档与这三项无关，仍按「需线上 DESC 确认」处理，不要顺带补跑。

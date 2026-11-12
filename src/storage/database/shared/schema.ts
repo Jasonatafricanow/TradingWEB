@@ -1,4 +1,4 @@
-import { check, mysqlTable, serial, varchar, char, text, timestamp, boolean, int, index, json, decimal, uniqueIndex, mysqlEnum } from "drizzle-orm/mysql-core"
+import { check, mysqlTable, serial, varchar, char, text, mediumtext, timestamp, boolean, int, index, json, decimal, uniqueIndex, mysqlEnum } from "drizzle-orm/mysql-core"
 import { sql } from "drizzle-orm"
 
 export const healthCheck = mysqlTable("health_check", {
@@ -506,9 +506,20 @@ export const emailLogs = mysqlTable(
 		status: varchar("status", { length: 20 }).notNull().default("sent"),
 		error: text("error"),
 		order_id: varchar("order_id", { length: 36 }),
+		body: mediumtext("body"),
+		content_type: varchar("content_type", { length: 10 }).notNull().default("text"),
+		dedupe_key: varchar("dedupe_key", { length: 191 }),
+		retry_of: varchar("retry_of", { length: 36 }),
+		provider_message_id: varchar("provider_message_id", { length: 100 }),
+		attempts: int("attempts").notNull().default(0),
 		created_at: timestamp("created_at").defaultNow().notNull(),
+		updated_at: timestamp("updated_at"),
 	},
-	(table) => [index("el_created_at_idx").on(table.created_at)]
+	(table) => [
+		index("el_created_at_idx").on(table.created_at),
+		uniqueIndex("email_logs_dedupe_key_uq").on(table.dedupe_key),
+		index("email_logs_status_idx").on(table.status, table.created_at),
+	]
 );
 
 // 寮冭喘杩藉洖
@@ -915,10 +926,12 @@ export const notifications = mysqlTable(
 		reference_id: varchar("reference_id", { length: 36 }),
 		is_read: boolean("is_read").default(false).notNull(),
 		channel: varchar("channel", { length: 20 }).default("in_app"),
+		dedupe_key: varchar("dedupe_key", { length: 191 }),
 		created_at: timestamp("created_at").defaultNow().notNull(),
 		read_at: timestamp("read_at"),
 	},
 	(table) => [
+		uniqueIndex("notifications_dedupe_key_uq").on(table.dedupe_key),
 		index("notifications_user_idx").on(table.user_id),
 		index("notifications_read_idx").on(table.is_read),
 		index("notifications_type_idx").on(table.type),

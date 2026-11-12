@@ -4,6 +4,9 @@
  */
 export const API_MESSAGES = {
   emailLogNotFound: "Email log not found",
+  emailResendNotAllowed: "This email cannot be resent from the log",
+  cronUnauthorized: "Unauthorized",
+  emailOutboxFailed: "Email outbox flush failed",
   invalidMembershipTier: "Invalid membership tier",
   storeAccessDenied: "Store access denied",
   invalidImageUrl: "Invalid image URL",
