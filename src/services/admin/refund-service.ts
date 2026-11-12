@@ -22,6 +22,8 @@ import { findOpenShiftId } from './pos-shift-service';
 import { restoreInventory } from '@/services/inventory/inventory-allocation-service';
 import { RefundStatus, isRefundStatus } from '@/lib/enums';
 import { TIMELINE_MESSAGES } from "@/lib/api-messages";
+import { logAction } from './audit-service';
+import { recordRefundRequestedEvent } from '@/services/notifications/order-notification-service';
 
 function withOrder(row: Record<string, unknown>) {
   return {
@@ -121,29 +123,45 @@ export async function createRefund(input: { order_id: string; amount: string; re
       evidence: input.evidence || null, admin_note: input.admin_note || null,
       processed_by: input.processed_by || null, restocked: false });
     await tx.update(orders).set({ has_refund: true }).where(eq(orders.id, input.order_id));
+    if (input.processed_by) {
+      await logAction({ userId: input.processed_by, action: 'refund.create', entityType: 'refund', entityId: id,
+        details: { order_id: order.id, order_no: order.order_no, amount: formatCents(amount), reason: input.reason } }, tx);
+    }
+    await recordRefundRequestedEvent(order, { id, amount: formatCents(amount) }, tx);
     const [data] = await tx.select().from(refunds).where(eq(refunds.id, id)).limit(1);
     return data;
   });
 }
 
-export async function approveRefund(refundId: string, adminId?: string) {
-  try {
-    await db.update(refunds).set({ status: RefundStatus.Approved, processed_by: adminId || null, processed_at: new Date() }).where(and(eq(refunds.id, refundId), eq(refunds.status, RefundStatus.Pending)));
-    const [data] = await db.select().from(refunds).where(eq(refunds.id, refundId)).limit(1);
+function changedRows(result: unknown): number {
+  return Number((result as unknown as [{ affectedRows?: number }])[0]?.affectedRows ?? 0);
+}
+
+/** Pending -> approved/rejected. Audits only when this call made the change. */
+async function decideRefund(refundId: string, next: typeof RefundStatus.Approved | typeof RefundStatus.Rejected, adminId?: string, adminNote?: string) {
+  return db.transaction(async tx => {
+    const result = await tx.update(refunds).set({
+      status: next,
+      processed_by: adminId || null,
+      processed_at: new Date(),
+      ...(next === RefundStatus.Rejected ? { admin_note: adminNote || null } : {}),
+    }).where(and(eq(refunds.id, refundId), eq(refunds.status, RefundStatus.Pending)));
+    const [data] = await tx.select().from(refunds).where(eq(refunds.id, refundId)).limit(1);
+    if (changedRows(result) > 0 && data) {
+      await logAction({ userId: adminId, action: next === RefundStatus.Approved ? 'refund.approve' : 'refund.reject',
+        entityType: 'refund', entityId: refundId,
+        details: { order_id: data.order_id, amount: data.amount, admin_note: adminNote || null } }, tx);
+    }
     return data;
-  } catch (error) {
-    throw error;
-  }
+  });
+}
+
+export async function approveRefund(refundId: string, adminId?: string) {
+  return decideRefund(refundId, RefundStatus.Approved, adminId);
 }
 
 export async function rejectRefund(refundId: string, adminNote?: string, adminId?: string) {
-  try {
-    await db.update(refunds).set({ status: RefundStatus.Rejected, admin_note: adminNote || null, processed_by: adminId || null, processed_at: new Date() }).where(and(eq(refunds.id, refundId), eq(refunds.status, RefundStatus.Pending)));
-    const [data] = await db.select().from(refunds).where(eq(refunds.id, refundId)).limit(1);
-    return data;
-  } catch (error) {
-    throw error;
-  }
+  return decideRefund(refundId, RefundStatus.Rejected, adminId, adminNote);
 }
 
 function paypalRefundProvider() {
@@ -153,7 +171,7 @@ function paypalRefundProvider() {
   return new PayPalProvider(clientId, clientSecret, process.env.PAYPAL_SANDBOX !== 'false');
 }
 
-export async function completeRefund(refundId: string, transactionId?: string) {
+export async function completeRefund(refundId: string, transactionId?: string, actorId?: string | null) {
   if (!transactionId) throw new PosApiError('REFUND_VERIFICATION_REQUIRED', 'A provider refund ID is required', 400);
   const verified = await paypalRefundProvider().getRefundById(transactionId);
   if (verified.id !== transactionId || verified.localRefundId !== refundId || verified.status !== 'COMPLETED') {
@@ -177,6 +195,9 @@ export async function completeRefund(refundId: string, transactionId?: string) {
       admin_note: `${refund.admin_note || ''}\nPayPal refund: ${transactionId}`.trim() }).where(eq(refunds.id, refundId));
     await tx.update(orders).set({ refunded_total: formatCents(total), financial_status: full ? 'refunded' : 'partially_refunded',
       ...(full ? { payment_status: 'refunded' } : {}) }).where(eq(orders.id, order.id));
+    await logAction({ userId: actorId ?? null, action: 'refund.complete', entityType: 'refund', entityId: refundId,
+      details: { order_id: order.id, order_no: order.order_no, amount: refund.amount, currency: order.currency || 'USD',
+        provider_refund_id: transactionId, source: actorId ? 'admin' : 'provider_webhook', full } }, tx);
     const [data] = await tx.select().from(refunds).where(eq(refunds.id, refundId)).limit(1);
     return data;
   });
@@ -193,6 +214,8 @@ export async function submitPayPalRefund(refundId: string, userId: string) {
     if (![RefundStatus.Approved, RefundStatus.Returned].includes(refund.status as typeof RefundStatus.Approved)) throw new PosApiError('INVALID_REFUND_STATE', 'Refund must be approved and not already submitted', 409);
     if (parseMoneyToCents(refund.amount) <= 0 || parseMoneyToCents(refund.amount) + parseMoneyToCents(order.refunded_total || '0.00') > parseMoneyToCents(order.total_amount)) throw new PosApiError('REFUND_EXCEEDS_TOTAL', 'Invalid remaining refund amount', 409);
     await tx.update(refunds).set({ status: 'processing', processed_by: userId, processed_at: new Date() }).where(eq(refunds.id, refundId));
+    await logAction({ userId, action: 'refund.payout_submit', entityType: 'refund', entityId: refundId,
+      details: { order_id: order.id, order_no: order.order_no, amount: refund.amount, currency: order.currency || 'USD' } }, tx);
     return { order, refund };
   });
   // Persist intent before sending money. Ambiguous failures remain processing;
@@ -200,7 +223,7 @@ export async function submitPayPalRefund(refundId: string, userId: string) {
   const result = await provider.refund({ paymentId: prepared.order.payment_id!, amount: Number(prepared.refund.amount),
     currency: prepared.order.currency || 'USD', refundId, reason: prepared.refund.reason });
   if (!result.success || !result.refundId) throw new PosApiError('REFUND_PENDING_VERIFICATION', 'Refund requires provider reconciliation; do not resubmit', 409);
-  return completeRefund(refundId, result.refundId);
+  return completeRefund(refundId, result.refundId, userId);
 }
 
 export async function getRefund(id: string) {
@@ -228,11 +251,16 @@ export async function processRefund(id: string, action: string, adminNote?: stri
 }
 export async function confirmReturn(id: string, userId?: string) {
   // Receipt of goods does not prove provider repayment or inventory allocation.
-  await db.update(refunds).set({ status: RefundStatus.Returned, processed_by: userId || null, processed_at: new Date() })
-    .where(and(eq(refunds.id, id), eq(refunds.status, RefundStatus.Approved)));
-  const [data] = await db.select().from(refunds).where(eq(refunds.id, id)).limit(1);
-  if (!data || data.status !== RefundStatus.Returned) throw new PosApiError('INVALID_REFUND_STATE', 'Refund must be approved before confirming return', 409);
-  return data;
+  return db.transaction(async tx => {
+    const result = await tx.update(refunds).set({ status: RefundStatus.Returned, processed_by: userId || null, processed_at: new Date() })
+      .where(and(eq(refunds.id, id), eq(refunds.status, RefundStatus.Approved)));
+    const [data] = await tx.select().from(refunds).where(eq(refunds.id, id)).limit(1);
+    if (!data || data.status !== RefundStatus.Returned) throw new PosApiError('INVALID_REFUND_STATE', 'Refund must be approved before confirming return', 409);
+    if (changedRows(result) > 0) {
+      await logAction({ userId, action: 'refund.return_received', entityType: 'refund', entityId: id, details: { order_id: data.order_id } }, tx);
+    }
+    return data;
+  });
 }
 
 export async function restockWebRefund(id: string, userId: string, returnItems: Array<{ order_item_id: string; quantity: number }>) {
@@ -267,6 +295,7 @@ export async function restockWebRefund(id: string, userId: string, returnItems: 
     }
     await tx.update(refunds).set({ restocked: true, ...(refund.status === "approved" ? { status: "returned" } : {}) }).where(eq(refunds.id, id));
     await tx.insert(orderTimeline).values({ id: randomUUID(), order_id: order.id, action: "return_restocked", description: TIMELINE_MESSAGES.webReturnRestocked(id), operator_id: userId });
+    await logAction({ userId, action: "refund.restock", entityType: "refund", entityId: id, details: { order_id: order.id, lines: returnItems } }, tx);
     return { ...refund, restocked: true };
   });
 }

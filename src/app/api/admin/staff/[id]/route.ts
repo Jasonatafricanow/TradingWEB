@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { requireUser, requireStaffRole, errorResponse } from "@/services/auth/auth-middleware"
 import { getStaffById, updateStaff, deleteStaff, type StaffUpdate } from "@/services/admin/staff-service"
 import { getStore } from "@/services/admin/store-service"
+import { logActionSafely } from "@/services/admin/audit-service"
 
 const ALLOWED_ROLES = new Set(["admin", "manager", "operator", "support"])
 const POS_PERMISSIONS = new Set([
@@ -103,6 +104,18 @@ export async function PUT(
     }
 
     const data = await updateStaff(id, update)
+    const { pos_pin: _pin, ...auditable } = update as StaffUpdate & { pos_pin?: unknown }
+    await logActionSafely({
+      userId: user.id,
+      action: "staff.update",
+      entityType: "staff",
+      entityId: id,
+      details: {
+        changes: auditable,
+        pin_changed: update.pos_pin !== undefined,
+        previous: { role: target.role, store_id: target.store_id, is_active: target.is_active },
+      },
+    })
     return NextResponse.json({ data })
   } catch (err) {
     return errorResponse(err)
@@ -125,6 +138,13 @@ export async function DELETE(
     }
 
     await deleteStaff(id)
+    await logActionSafely({
+      userId: user.id,
+      action: "staff.delete",
+      entityType: "staff",
+      entityId: id,
+      details: { email: target.email, role: target.role, store_id: target.store_id },
+    })
     return NextResponse.json({ success: true })
   } catch (err) {
     return errorResponse(err)

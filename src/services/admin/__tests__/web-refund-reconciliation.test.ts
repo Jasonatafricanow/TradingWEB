@@ -8,12 +8,14 @@ function database(status = "processing", refunded = "0.00") {
   const order = { id: "order", source: "web", payment_method: "paypal", payment_id: "capture", total_amount: "20.00", refunded_total: refunded, currency: "EUR" };
   const reads = [[refund], [order], [refund], [{ ...refund, status: "completed" }]];
   const updates: Record<string, unknown>[] = [];
+  const audits: Record<string, unknown>[] = [];
   const tx = {
+    insert: () => ({ values: async (value: Record<string, unknown>) => { audits.push(value); } }),
     select: () => { const q = { from: () => q, where: () => q, for: () => q, limit: async () => reads.shift() }; return q; },
     update: () => ({ set: (value: Record<string, unknown>) => { updates.push(value); return { where: async () => undefined }; } }),
   };
   mocks.transaction.mockImplementation(async work => work(tx));
-  return { updates };
+  return { updates, audits };
 }
 beforeEach(() => {
   vi.clearAllMocks();
@@ -22,9 +24,10 @@ beforeEach(() => {
 });
 describe("verified online refunds", () => {
   it("updates cumulative partial amount without claiming inventory restoration", async () => {
-    const { updates } = database();
+    const { updates, audits } = database();
     await completeRefund("refund", "pp-refund");
     expect(updates[0]).not.toHaveProperty("restocked");
+    expect(audits).toEqual([expect.objectContaining({ action: "refund.complete", entity_id: "refund", user_id: null })]);
     expect(updates[1]).toMatchObject({ refunded_total: "10.00", financial_status: "partially_refunded" });
   });
   it("marks a full cumulative refund and replays completed confirmations without writes", async () => {
@@ -34,6 +37,7 @@ describe("verified online refunds", () => {
     const replay = database("completed");
     await completeRefund("refund", "pp-refund");
     expect(replay.updates).toEqual([]);
+    expect(replay.audits).toEqual([]);
   });
   it("rejects provider currency mismatch", async () => {
     const { updates } = database();

@@ -11,6 +11,7 @@ import { emptyToNull, dateOrNull, logDbError } from '@/lib/sanitize';
 import { OrderStatus, FinancialStatus, PaymentStatus } from '@/lib/enums';
 import { deductInventoryForOrderInTransaction } from './order-stock-service';
 import { insertOrderTimeline } from './order-timeline';
+import { deliverQueuedEmailSafely, recordOrderPaidEvents, recordPaymentConflictEvent } from '@/services/notifications/order-notification-service';
 
 interface PricedOrderItem {
   id: string;
@@ -397,6 +398,7 @@ async function recordPaymentFinalizeConflict(
         new_value: "payment_conflict",
         operator_id: payload.operator_id ?? null,
       }, tx);
+      await recordPaymentConflictEvent(order, tx);
     }
 
     const [updated] = await tx.select().from(orders).where(eq(orders.id, orderId)).limit(1);
@@ -423,6 +425,7 @@ export async function markOrderPaidIfNotAlready(
   payload: MarkOrderPaidPayload,
 ): Promise<MarkOrderPaidResult> {
   try {
+    let confirmationEmailId: string | null = null;
     const result = await db.transaction(async (tx): Promise<MarkOrderPaidResult> => {
       const update = await tx.update(orders).set({
         status: "paid",
@@ -489,8 +492,12 @@ export async function markOrderPaidIfNotAlready(
       }, tx);
 
       const [updated] = await tx.select().from(orders).where(eq(orders.id, orderId)).limit(1);
+      // Only the transaction that performed the transition notifies, and it
+      // commits or rolls back together with the payment.
+      confirmationEmailId = await recordOrderPaidEvents(updated ?? order, tx);
       return { transitioned: true, conflict: false, order: updated ?? order };
     });
+    await deliverQueuedEmailSafely(confirmationEmailId);
 
     if (
       payload.external_payment_confirmed

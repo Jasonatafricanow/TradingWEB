@@ -11,56 +11,46 @@ export interface CreateNotificationInput {
   reference_type?: string;
   reference_id?: string;
   channel?: 'in_app' | 'email' | 'whatsapp';
+  /** Same key -> at most one notification (duplicate events are ignored). */
+  dedupe_key?: string | null;
 }
 
-export async function createNotification(input: CreateNotificationInput) {
-  try {
-    const id = randomUUID();
-    await db.insert(notifications).values({
-      id,
-      user_id: input.user_id,
-      type: input.type,
-      title: input.title,
-      body: input.body || null,
-      reference_type: input.reference_type || null,
-      reference_id: input.reference_id || null,
-      channel: input.channel || 'in_app',
-    });
-    return { success: true };
-  } catch (error) {
-    throw error;
-  }
+type DbTx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+type Executor = typeof db | DbTx;
+
+export async function createNotification(input: CreateNotificationInput, executor: Executor = db) {
+  const dedupeKey = input.dedupe_key?.slice(0, 191) || null;
+  await executor.insert(notifications).values({
+    id: randomUUID(),
+    user_id: input.user_id,
+    type: input.type,
+    title: input.title.slice(0, 255),
+    body: input.body || null,
+    reference_type: input.reference_type || null,
+    reference_id: input.reference_id || null,
+    channel: input.channel || 'in_app',
+    dedupe_key: dedupeKey,
+  }).onDuplicateKeyUpdate({ set: { dedupe_key: dedupeKey } });
+  return { success: true };
 }
 
 export async function getUserNotifications(userId: string, limit = 50, unreadOnly = false) {
-  try {
-    const query = unreadOnly
-      ? db.select().from(notifications).where(and(eq(notifications.user_id, userId), eq(notifications.is_read, false)))
-      : db.select().from(notifications).where(eq(notifications.user_id, userId));
-    return await query.orderBy(desc(notifications.created_at)).limit(limit);
-  } catch (error) {
-    throw error;
-  }
+  const query = unreadOnly
+    ? db.select().from(notifications).where(and(eq(notifications.user_id, userId), eq(notifications.is_read, false)))
+    : db.select().from(notifications).where(eq(notifications.user_id, userId));
+  return await query.orderBy(desc(notifications.created_at)).limit(limit);
 }
 
 export async function markAsRead(notificationId: string, userId: string) {
-  try {
-    await db.update(notifications)
-      .set({ is_read: true, read_at: new Date() })
-      .where(and(eq(notifications.id, notificationId), eq(notifications.user_id, userId)));
-    return { success: true };
-  } catch (error) {
-    throw error;
-  }
+  await db.update(notifications)
+    .set({ is_read: true, read_at: new Date() })
+    .where(and(eq(notifications.id, notificationId), eq(notifications.user_id, userId)));
+  return { success: true };
 }
 
 export async function markAllAsRead(userId: string) {
-  try {
-    await db.update(notifications).set({ is_read: true, read_at: new Date() }).where(and(eq(notifications.user_id, userId), eq(notifications.is_read, false)));
-    return { success: true };
-  } catch (error) {
-    throw error;
-  }
+  await db.update(notifications).set({ is_read: true, read_at: new Date() }).where(and(eq(notifications.user_id, userId), eq(notifications.is_read, false)));
+  return { success: true };
 }
 
 export async function getUnreadCount(userId: string) {

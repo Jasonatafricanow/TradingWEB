@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
-import { requireStaffRole, errorResponse } from "@/services/auth/auth-middleware"
+import { requireStaffRole, requireUser, errorResponse } from "@/services/auth/auth-middleware"
+import { logActionSafely } from "@/services/admin/audit-service"
 import { listStaff, createStaff } from "@/services/admin/staff-service"
 
 const ALLOWED_ROLES = new Set(["admin", "operator", "support"])
@@ -19,6 +20,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     await requireStaffRole(request, ['admin']);
+    const actor = await requireUser(request)
     const body = await request.json()
     const { name, email, role, phone, user_id } = body
     const normalizedName = typeof name === "string" ? name.trim().slice(0, 100) : ""
@@ -39,6 +41,13 @@ export async function POST(request: NextRequest) {
       role: normalizedRole,
       phone: normalizedPhone,
       user_id: normalizedUserId,
+    })
+    await logActionSafely({
+      userId: actor.id,
+      action: "staff.create",
+      entityType: "staff",
+      entityId: (data as { id?: string } | null)?.id,
+      details: { email: normalizedEmail, role: normalizedRole, user_id: normalizedUserId ?? null },
     })
     return NextResponse.json({ data })
   } catch (err) {
