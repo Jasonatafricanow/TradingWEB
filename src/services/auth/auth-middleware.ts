@@ -76,7 +76,7 @@ export function errorResponse(err: unknown): NextResponse {
   // AuthError/AppError 取各自 status；其他错误统一 500。
   // 兼容旧 `(err as { status?: number }).status === 400` 的写法。
   const fallbackStatus =
-    typeof (err as { status?: number }).status === "number"
+    typeof (err as { status?: number } | null)?.status === "number"
       ? (err as { status: number }).status
       : 500;
   const status =
@@ -96,6 +96,7 @@ export function errorResponse(err: unknown): NextResponse {
   }
   // 错误日志：5xx 写到 stderr，4xx 仅在开发环境输出。
   if (status >= 500) {
+    body.error = "Internal server error";
     console.error("[api-error]", { status, message, err });
   } else if (process.env.NODE_ENV !== "production") {
     console.warn("[api-warn]", { status, message });

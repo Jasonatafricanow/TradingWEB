@@ -1,3 +1,4 @@
+import { isAllowedImageUrl } from "@/lib/image-url";
 /**
  * 六维校验
  *
@@ -193,7 +194,7 @@ export function validateProducts(
     if (r.images && r.images.length > 0) {
       for (let k = 0; k < r.images.length; k++) {
         const img = r.images[k];
-        if (!img.url || img.url.trim() === "") {
+        if (!isAllowedImageUrl(img.url)) {
           errors.push({
             record_index: i,
             source_id: r.source_id,
@@ -345,7 +346,7 @@ export function validateProducts(
 
     for (let k = 0; k < (r.images ?? []).length; k++) {
       const img = r.images![k];
-      if (!img.url || img.url.trim() === "") {
+      if (!isAllowedImageUrl(img.url)) {
         errors.push({
           record_index: i,
           source_id: r.source_id,

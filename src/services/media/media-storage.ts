@@ -110,6 +110,13 @@ async function storeMediaObject(file: File, folder?: string): Promise<StoredMedi
   const ext = assertValidFile(file);
   const key = `${normalizeFolder(folder)}/${randomUUID()}${ext}`;
   const buffer = Buffer.from(await file.arrayBuffer());
+  const signatures: Record<string, boolean> = {
+    "image/jpeg": buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff,
+    "image/png": buffer.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])),
+    "image/gif": ["GIF87a", "GIF89a"].includes(buffer.subarray(0, 6).toString("ascii")),
+    "image/webp": buffer.subarray(0, 4).toString("ascii") === "RIFF" && buffer.subarray(8, 12).toString("ascii") === "WEBP",
+  };
+  if (!signatures[file.type]) throw new ValidationError("Image content does not match its declared type");
 
   if (isS3Configured()) {
     const bucket = getS3Bucket();

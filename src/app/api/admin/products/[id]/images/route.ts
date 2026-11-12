@@ -1,3 +1,4 @@
+import { isAllowedImageUrl } from "@/lib/image-url";
 import { NextResponse } from "next/server";
 import { asc, and, eq, notInArray } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
@@ -24,7 +25,7 @@ function cleanText(value: unknown): string | null {
 function cleanMirrorStatus(value: unknown): string {
   const status = cleanText(value);
   if (status && ["pending", "mirrored", "failed", "skipped"].includes(status)) return status;
-  return "mirrored";
+  return "skipped";
 }
 
 export async function GET(
@@ -56,6 +57,9 @@ export async function PUT(
     const body = await request.json();
     const images = Array.isArray(body.images) ? (body.images as ProductImageInput[]) : [];
 
+    if (images.some(image => !isAllowedImageUrl(image.src, true) || (image.original_url && !isAllowedImageUrl(image.original_url, true)))) {
+      return NextResponse.json({ error: "Invalid image URL" }, { status: 400 });
+    }
     const data = await db.transaction(async (tx) => {
       const [product] = await tx.select({ id: products.id }).from(products).where(eq(products.id, id)).limit(1);
       if (!product) {

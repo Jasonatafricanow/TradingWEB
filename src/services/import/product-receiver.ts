@@ -1,3 +1,4 @@
+import { isAllowedImageUrl } from "@/lib/image-url";
 /**
  * Product Receiver
  *
@@ -335,6 +336,7 @@ async function syncImagesForProduct(
   if (!record.images || record.images.length === 0) return;
   for (let i = 0; i < record.images.length; i++) {
     const img = record.images[i];
+    if (!isAllowedImageUrl(img.url)) throw new Error("Image URL must use HTTPS and an allowed host");
     const imageSourceId = `${record.source_id}:image:${i}`;
     const mapping = await findMapping({
       source: ctx.source,

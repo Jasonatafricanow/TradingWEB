@@ -1,3 +1,4 @@
+import { escapeCsvField } from "@/lib/csv";
 import { NextRequest, NextResponse } from "next/server";
 import { requireStaffRole, errorResponse } from "@/services/auth/auth-middleware";
 import { db } from "@/lib/db";
@@ -59,7 +60,7 @@ export async function GET(request: NextRequest) {
         row.last_order_at ? String(row.last_order_at).split("T")[0] : "",
         row.tags || "",
         tierLabel,
-      ].map(e => `"${String(e).replace(/"/g, '""')}"`).join(","));
+      ].map(escapeCsvField).join(","));
     }
 
     const csvContent = csvRows.join("\n");

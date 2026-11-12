@@ -1,5 +1,6 @@
 "use client"
 
+import { escapeCsvField } from "@/lib/csv";
 import { useEffect, useState, useCallback, use } from "react"
 import Link from "next/link"
 import { apiFetch } from "@/lib/client-api"
@@ -140,12 +141,7 @@ function formatTs(ts: string | null | undefined): string {
   }
 }
 
-function csvEscape(value: string): string {
-  if (value.includes(",") || value.includes('"') || value.includes("\n")) {
-    return `"${value.replace(/"/g, '""')}"`
-  }
-  return value
-}
+const csvEscape = escapeCsvField;
 
 function formatNumber(value: number): string {
   return new Intl.NumberFormat("zh-CN").format(value)
