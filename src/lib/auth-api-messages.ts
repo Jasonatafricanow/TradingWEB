@@ -3,4 +3,5 @@ export const AUTH_API_MESSAGES = {
   tooManyLoginAttempts: "Too many login attempts. Try again later.",
   tooManyResetRequests: "Too many reset requests. Try again later.",
   invalidResetLink: "Reset link is expired or invalid",
+  resetUnavailable: "Password reset is temporarily unavailable.",
 } as const;
