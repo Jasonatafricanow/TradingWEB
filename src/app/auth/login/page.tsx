@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, Suspense } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -49,6 +49,14 @@ function LoginPageInner() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorKey, setErrorKey] = useState<TranslationKeyWithoutParams | null>(null);
+  // Sample accounts exist only in the in-memory demo store; never list them on a real site.
+  const [demoMode, setDemoMode] = useState(false);
+  useEffect(() => {
+    fetch("/api/public/settings")
+      .then((r) => r.json())
+      .then((j) => setDemoMode(j.data?.demo === true))
+      .catch(() => {});
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -231,6 +239,7 @@ function LoginPageInner() {
           </div>
 
           {/* Demo accounts */}
+          {demoMode && (
           <div className="mt-4 rounded-2xl border border-border bg-muted/50 p-4">
             <p className="flex items-center gap-2 text-[11.5px] font-medium text-muted-foreground">
               <Lightning className="h-3.5 w-3.5 text-primary" weight="fill" />
@@ -255,6 +264,7 @@ function LoginPageInner() {
             </div>
             <p className="mt-2.5 text-[11px] text-muted-foreground">{t("auth.demo_fill_hint")}</p>
           </div>
+          )}
 
           <p className="mt-6 text-center text-sm text-muted-foreground">
             {t("auth.web.no_account")}{" "}
