@@ -13,7 +13,6 @@ import { useI18n } from "@/contexts/i18n-context";
 import { useCurrency } from "@/contexts/currency-context";
 import { translate } from "@/i18n";
 import { apiFetch } from "@/lib/client-api";
-import { safeUUID } from "@/lib/client-safe";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
