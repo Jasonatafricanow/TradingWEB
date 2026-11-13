@@ -309,5 +309,6 @@ MIGRATION_RECONCILIATION_ALLOW_DISPOSABLE_DB=1 DB_NAME=tw_replay_check DB_HOST=�
 0040 上线后三项功能（会员折扣、钱包、推广佣金）默认全部关闭，价格不变；由管理员在后台「会员与推广规则」逐项开启。
 0040 会把 `referrals` 里已有的提现/退出记录（`PAYOUT_`/`EXIT_` 开头）标为 `kind = 'payout'`，佣金查询不再把它们算进去。
 
+0034 建 `oauth_identities` 时按线上 `users.id` 实际的排序规则建 `user_id`（外键要求两边一致；`users` 是 `utf8mb4_unicode_ci`，新表默认会是库的默认排序规则）。
 0037、0039、0040 每一步都先查 information_schema，已满足就跳过；如果线上 `email_logs` 用的不是 `to_email` 列（例如历史上手工建成 `recipient`），先停下核对，不要直接跑。
 `0008` 的 journal 断档与这三项无关，仍按「需线上 DESC 确认」处理，不要顺带补跑。

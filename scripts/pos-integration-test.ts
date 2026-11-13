@@ -64,7 +64,8 @@ async function main() {
 
   console.log('── seed ──');
   await q(`INSERT INTO categories (id, name, type) VALUES (?, ?, 'physical')`, [catId, `POS测试类目${sfx}`]);
-  const storeMetadata = JSON.stringify({ currency: 'USD', tax: '0.00', pricing_version: 'pos-v1' });
+  // Up to 5% off without a second approver (TW-09); the checkout below takes 1.25%.
+  const storeMetadata = JSON.stringify({ currency: 'USD', tax: '0.00', pricing_version: 'pos-v1', max_unapproved_discount_bps: 500 });
   await q(`INSERT INTO stores (id, name, status, type, metadata) VALUES (?, ?, 'active', 'permanent', ?)`, [storeA, `POS测试A店${sfx}`, storeMetadata]);
   await q(`INSERT INTO stores (id, name, status, type, metadata) VALUES (?, ?, 'active', 'permanent', ?)`, [storeB, `POS测试B店${sfx}`, storeMetadata]);
   await q(`INSERT INTO users (id, email, name, is_active) VALUES (?, ?, ?, TRUE)`, [accountUserId, `pos-${sfx}@example.test`, `POS Account ${sfx}`]);
