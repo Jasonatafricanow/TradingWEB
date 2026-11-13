@@ -37,7 +37,7 @@ export const zhSales = {
   "catalog.type.virtual": "数字商品",
   "catalog.type.physical": "实体商品",
   "catalog.type.unknown": "商品",
-  "cart.empty": "购物车是空的",
+  "cart.empty": "购物车为空",
   "checkout.delivery_zone": "配送区域",
   "checkout.free_shipping_threshold": "满 {amount} 免邮",
   "product.add_to_cart": "加入购物车",

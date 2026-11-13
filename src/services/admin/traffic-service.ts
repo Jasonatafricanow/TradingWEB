@@ -89,6 +89,33 @@ export async function recordWhatsAppClick(data: WhatsAppClickRecord) {
 }
 
 export async function getTrafficSummary(days: number = 30): Promise<TrafficSummary> {
+  const { IS_DEMO_MODE } = await import('@/config/constants');
+  if (IS_DEMO_MODE) {
+    const m = await import('@/lib/demo/commerce');
+    const trend = m.demoTrafficSeries(days);
+    const totalPv = trend.reduce((s, d) => s + d.pv, 0);
+    const totalUv = trend.reduce((s, d) => s + d.uv, 0);
+    const pages = m.demoPageRanking();
+    const paidOrderCount = m.demoListOrders().filter((o) => o.payment_status === 'paid').length + 1180;
+    const checkoutCount = Math.round(totalUv * 0.09);
+    return {
+      totalPv, totalUv,
+      productPageViews: pages.filter((p) => p.page.startsWith('/products/')).reduce((s, p) => s + p.views, 0),
+      topPages: pages.map((p) => ({ path: p.page, count: p.views, title: p.page })),
+      dailyTrend: trend.map((d) => ({ date: d.date, pv: d.pv, uv: d.uv })),
+      referrers: m.demoTrafficSources().map((s) => ({ source: s.name, count: s.value })),
+      whatsappClicks: 1842, uniqueWaVisitors: 1130,
+      conversionRate: Number(((paidOrderCount / Math.max(1,totalUv)) * 100).toFixed(2)),
+      checkoutCount, paidOrderCount,
+      funnelSteps: [
+        { label: '访问', count: totalUv, rate: 100 },
+        { label: '浏览商品', count: Math.round(totalUv*0.62), rate: 62 },
+        { label: '加入购物车', count: Math.round(totalUv*0.21), rate: 21 },
+        { label: '进入结算', count: checkoutCount, rate: Number(((checkoutCount/totalUv)*100).toFixed(1)) },
+        { label: '完成支付', count: paidOrderCount, rate: Number(((paidOrderCount/totalUv)*100).toFixed(1)) },
+      ],
+    };
+  }
   const since = new Date(Date.now() - days * 86400000);
 
   const [totalRow] = await db.select({ count: sql<number>`count(*)` }).from(pageViews)

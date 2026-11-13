@@ -29,6 +29,11 @@ export interface CategoryUpdate {
 }
 
 export async function listCategories() {
+  const { IS_DEMO_MODE } = await import('@/config/constants');
+  if (IS_DEMO_MODE) {
+    const { DEMO_CATEGORIES } = await import('@/lib/demo/catalog');
+    return { data: DEMO_CATEGORIES, error: null } as never;
+  }
   try {
     const data = await db.select().from(categories).orderBy(asc(categories.sort_order))
     return { data: data || [], error: null }

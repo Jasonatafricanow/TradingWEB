@@ -7,6 +7,11 @@ import { randomUUID } from 'node:crypto';
 
 export async function getRecommendations(productId: string, limit = 6) {
   const safeLimit = Math.min(Math.max(Math.trunc(limit) || 6, 1), 12);
+  const { IS_DEMO_MODE } = await import('@/config/constants');
+  if (IS_DEMO_MODE) {
+    const { demoRecommendations } = await import('@/lib/demo/catalog');
+    return demoRecommendations(productId, safeLimit) as unknown as Array<typeof products.$inferSelect>;
+  }
   const results: Array<typeof products.$inferSelect> = [];
   const added = new Set<string>();
 

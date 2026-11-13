@@ -6,6 +6,11 @@ import { getMyAffiliate } from "@/services/affiliate/affiliate-service"
 export async function GET(request: NextRequest) {
   try {
     const user = await requireUser(request)
+    const { IS_DEMO_MODE } = await import("@/config/constants")
+    if (IS_DEMO_MODE) {
+      const { demoStore } = await import("@/lib/demo/commerce")
+      return NextResponse.json({ data: demoStore().affiliate })
+    }
     const data = await getMyAffiliate(user.id)
     return NextResponse.json({ data })
   } catch (err) {

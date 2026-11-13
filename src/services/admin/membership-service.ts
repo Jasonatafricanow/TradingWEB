@@ -42,6 +42,11 @@ export interface UserMembership {
 }
 
 export async function listTiers() {
+  const { IS_DEMO_MODE } = await import('@/config/constants');
+  if (IS_DEMO_MODE) {
+    const { DEMO_TIERS } = await import('@/lib/demo/commerce');
+    return DEMO_TIERS as never;
+  }
   try {
     const data = await db.select().from(membershipTiers).orderBy(asc(membershipTiers.level));
     return { data: data || [], error: null };

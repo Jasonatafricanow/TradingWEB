@@ -90,6 +90,11 @@ function normalizedVariantValues(
  * Get all active variants for a product, sorted by position
  */
 export async function getVariants(productId: string) {
+  const { IS_DEMO_MODE } = await import('@/config/constants');
+  if (IS_DEMO_MODE) {
+    const { demoVariants } = await import('@/lib/demo/catalog');
+    return { data: demoVariants(productId), error: null };
+  }
   try {
     const data = await db.select()
       .from(productVariants)

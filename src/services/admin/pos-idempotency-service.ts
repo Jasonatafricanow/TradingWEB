@@ -83,6 +83,15 @@ export async function runIdempotent<T>(
   work: () => Promise<T>,
   completion: IdempotencyCompletion<T> = {},
 ): Promise<T> {
+  const { IS_DEMO_MODE } = await import("@/config/constants");
+  if (IS_DEMO_MODE) {
+    const g = globalThis as typeof globalThis & { __demoIdem?: Map<string, unknown> };
+    if (!g.__demoIdem) g.__demoIdem = new Map();
+    if (g.__demoIdem.has(input.key)) return g.__demoIdem.get(input.key) as T;
+    const result = await work();
+    g.__demoIdem.set(input.key, result);
+    return result;
+  }
   let reserved = false;
   try {
     return await db.transaction(async tx => {

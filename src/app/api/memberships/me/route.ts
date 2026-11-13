@@ -6,6 +6,11 @@ import { getUserMembership, getUserWallet, getUserCoupons } from "@/services/adm
 export async function GET(request: Request) {
   try {
     const user = await requireUser(request)
+    const { IS_DEMO_MODE } = await import('@/config/constants')
+    if (IS_DEMO_MODE) {
+      const { demoMembership } = await import('@/lib/demo/commerce')
+      return NextResponse.json({ data: demoMembership() })
+    }
     const [membership, wallet, coupons] = await Promise.all([
       getUserMembership(user.id),
       getUserWallet(user.id),

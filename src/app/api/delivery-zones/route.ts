@@ -5,6 +5,11 @@ import { listDeliveryZones } from "@/services/admin/delivery-zone-service"
 // GET /api/delivery-zones — active zones for checkout (public, read-only).
 // The admin route requires staff auth, so the storefront cannot use it.
 export async function GET() {
+  const { IS_DEMO_MODE } = await import('@/config/constants');
+  if (IS_DEMO_MODE) {
+    const { DEMO_DELIVERY_ZONES } = await import('@/lib/demo/commerce');
+    return NextResponse.json({ data: DEMO_DELIVERY_ZONES });
+  }
   try {
     const zones = await listDeliveryZones(true)
     const data = zones.map((zone) => ({

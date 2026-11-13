@@ -1,198 +1,237 @@
-﻿"use client"
-import { Fragment } from "react"
-import Link from "next/link"
+"use client";
 
-export default function Page() {
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import Image from "next/image";
+import { Star, ShoppingCart, Check, X, ArrowRight } from "@phosphor-icons/react";
+import { toast } from "sonner";
+import { useI18n } from "@/contexts/i18n-context";
+import { useCurrency } from "@/contexts/currency-context";
+import { useCart } from "@/contexts/cart-context";
+import { Button } from "@/components/ui/button";
+import { BreadcrumbPublic } from "@/components/breadcrumb-public";
+import { cn } from "@/lib/utils";
+
+interface Product {
+  id: string;
+  title: string;
+  title_en: string | null;
+  description: string | null;
+  description_en: string | null;
+  price: string;
+  type: string;
+  image_key: string | null;
+  rating?: number;
+  review_count?: number;
+  stock?: number;
+  vendor?: string;
+  delivery_method?: string;
+  duration?: string | null;
+  highlights?: string[];
+  highlights_en?: string[];
+  categories?: { name: string; name_en: string | null } | null;
+}
+
+const DEFAULT_PICKS = ["prod-20", "prod-21", "prod-22"];
+
+export default function ComparePage() {
+  const { t, locale } = useI18n();
+  const { format } = useCurrency();
+  const { addItem } = useCart();
+  const [all, setAll] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [picked, setPicked] = useState<string[]>(DEFAULT_PICKS);
+
+  useEffect(() => {
+    fetch("/api/products")
+      .then((r) => r.json())
+      .then((j) => setAll(j.data || []))
+      .catch(() => setAll([]))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const loc = (p: Product, field: "title" | "description") => {
+    const rec = p as unknown as Record<string, string | null>;
+    if (locale === "zh") return rec[field] || "";
+    return rec[`${field}_${locale}`] || rec[`${field}_en`] || rec[field] || "";
+  };
+
+  const selected = useMemo(
+    () => picked.map((id) => all.find((p) => p.id === id)).filter(Boolean) as Product[],
+    [picked, all]
+  );
+
+  const toggle = (id: string) => {
+    setPicked((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : prev.length >= 4 ? prev : [...prev, id]
+    );
+  };
+
+  const deliveryLabel = (m?: string) =>
+    m === "shipping" ? t("product.shipping") : m === "download" ? t("product.download") : m === "email" ? t("product.email") : t("product.online");
+
+  const rows: { key: string; label: string; render: (p: Product) => React.ReactNode }[] = [
+    { key: "price", label: t("compare.price"), render: (p) => <span className="font-mono text-lg font-medium">{format(Number(p.price))}</span> },
+    { key: "rating", label: t("compare.rating"), render: (p) => (
+      <span className="inline-flex items-center gap-1">
+        <Star className="h-3.5 w-3.5 text-amber-500" weight="fill" />
+        <span className="font-medium">{(p.rating ?? 4.8).toFixed(1)}</span>
+        <span className="text-xs text-muted-foreground">({p.review_count ?? 0})</span>
+      </span>
+    ) },
+    { key: "vendor", label: t("compare.vendor"), render: (p) => p.vendor || "—" },
+    { key: "category", label: t("home.cat.title"), render: (p) => (locale === "zh" ? p.categories?.name : p.categories?.name_en || p.categories?.name) || "—" },
+    { key: "delivery", label: t("compare.delivery"), render: (p) => deliveryLabel(p.delivery_method) },
+    { key: "duration", label: t("product.duration"), render: (p) => p.duration || "—" },
+    { key: "stock", label: t("compare.stock"), render: (p) => p.type === "physical" ? (p.stock ?? 0) : "∞" },
+  ];
+
   return (
-  <Fragment>
+    <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+      <BreadcrumbPublic items={[{ label: t("crumb.products"), href: "/products" }, { label: t("compare.title") }]} />
 
-{/* TopNavBar */}
-<header className="fixed top-0 w-full bg-surface-container-lowest/80 backdrop-blur-md border-b border-border-subtle z-50 shadow-sm">
-<nav className="flex items-center justify-between px-margin-desktop py-4 max-w-container-max mx-auto">
-<div className="flex items-center gap-8">
-<span className="text-headline-sm font-headline-sm font-bold text-primary">GlobalTrade</span>
-<div className="hidden md:flex items-center gap-6">
-<Link className="text-primary font-bold border-b-2 border-primary pb-1 font-body-md text-body-md cursor-pointer active:opacity-70" href="/products">roducts</Link>
-<Link className="text-on-surface-variant hover:text-primary transition-colors duration-200 font-body-md text-body-md cursor-pointer active:opacity-70" href="/consulting">onsulting</Link>
-<Link className="text-on-surface-variant hover:text-primary transition-colors duration-200 font-body-md text-body-md cursor-pointer active:opacity-70" href="/digital-goods">igital Goods</Link>
-</div>
-</div>
-<div className="flex items-center gap-4">
-<button className="hidden sm:block text-on-surface-variant hover:text-primary transition-all duration-300 font-body-md text-body-md px-4 py-2">Log In</button>
-<button className="bg-primary text-on-primary px-6 py-2 rounded-lg font-bold hover:bg-on-primary-fixed-variant transition-all duration-300 shadow-sm active:scale-95">Get Started</button>
-</div>
-</nav>
-</header>
-<main className="pt-32 pb-20">
-{/* Hero Section */}
-<section className="max-w-container-max mx-auto px-margin-desktop mb-16">
-<div className="flex flex-col gap-4 max-w-3xl">
-<span className="font-label-caps text-label-caps text-primary uppercase tracking-widest">Comparison Engine</span>
-<h1 className="font-display-lg text-display-lg text-on-surface">Find the perfect tool for your digital workflow.</h1>
-<p className="font-body-lg text-body-lg text-on-surface-variant">Analyze technical specifications across our flagship ecosystem. Precision-engineered hardware, compared side-by-side for total transparency.</p>
-</div>
-</section>
-{/* Comparison Table */}
-<section className="max-w-container-max mx-auto px-margin-desktop">
-<div className="bg-surface-container-lowest rounded-xl border border-border-subtle shadow-sm overflow-hidden">
-{/* Sticky Product Headers */}
-<div className="comparison-grid border-b border-border-subtle glass-header sticky top-[73px] z-40 bg-surface-container-lowest/95">
-<div className="p-6 flex items-end">
-<span className="font-label-caps text-label-caps text-outline uppercase">Specifications</span>
-</div>
-{/* Product 1 */}
-<div className="p-6 flex flex-col items-center text-center gap-4 border-l border-border-subtle">
-<div className="w-32 h-32 rounded-lg bg-surface-container-low overflow-hidden group">
-<img className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" data-alt="A premium high-end smartphone with a sleek metallic titanium finish and a large edge-to-edge vibrant glass display. The phone is positioned on a minimalist marble surface with soft, cinematic lighting creating elegant reflections. The overall aesthetic is professional, modern, and high-tech with a clean blue-tinted light mode atmosphere." src="https://lh3.googleusercontent.com/aida-public/AB6AXuB9YUeTUE_mVQN3oDNONYiANwvzyvKvbIoFC6WHr5OhFLlmtmi9CqCM9hk5qEi2HpANfSJ_8z_eIxKsponuBgUDdHWNu194Z2LuEfYRVCKXM5DNEMn1ZVv5pSRml1hFJwHY_QnHD_9rIqrScRREitRBb_8n0ME1Un1Co1lIdL1wxWqx5z66_9W8YBgqAeaQ4DPrEcyEi48ZQnSqEkPpeM0QE43hRdXeAcHtUuOlLW6DP3_JjQfEc_rINvGYFNqP0OflFscQ_kLnkwo"/>
-</div>
-<h3 className="font-headline-sm text-headline-sm text-on-surface">Pro-X 15</h3>
-</div>
-{/* Product 2 */}
-<div className="p-6 flex flex-col items-center text-center gap-4 border-l border-border-subtle">
-<div className="w-32 h-32 rounded-lg bg-surface-container-low overflow-hidden group">
-<img className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" data-alt="Modern wireless noise-canceling headphones with a matte charcoal finish and plush leather ear cups. The headphones are shown in a high-key studio setting with bright, diffuse lighting and a clean white background. The style is minimalist and corporate, emphasizing premium build quality and sophisticated technology." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDOSkhy6lyBXDlxvn4_dc8oBpiWmFES5xIOqP0eGnLOH2OM1sVqa0c8vO9iffzgs1DAZW6CStwnfGUoCIKBsrWC8mk4sMWkWpZ3jnjsKXl6aGGcvrf_HDyb7jsyYn0HhFk-7LVMdXAGkI5ItP3NKQGFdaIFuY_bLx8HQI87Q0PUIOYF5CJdYvjNE2s-4hV4ABSn9BqAyN3E0VQBG6fPuYGZwv7eZEy94U7uL79JbW_IbIn3rSLVW6pBikTlJcvYMKWZPmU2j_khNVo"/>
-</div>
-<h3 className="font-headline-sm text-headline-sm text-on-surface">SonicBuds Ultra</h3>
-</div>
-{/* Product 3 */}
-<div className="p-6 flex flex-col items-center text-center gap-4 border-l border-border-subtle">
-<div className="w-32 h-32 rounded-lg bg-surface-container-low overflow-hidden group">
-<img className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" data-alt="A sleek smart watch with a vibrant OLED circular screen and a high-performance silicone band. The watch is presented on a clean tech-inspired background with soft ambient blue lighting that highlights its slim profile and modern design. The image conveys precision engineering and active lifestyle connectivity in a premium corporate style." src="https://lh3.googleusercontent.com/aida-public/AB6AXuC0DnHmqiVKu7lWxCe9eEWFUdyACJUbsVRnFNOq3IxAkHdYwHzjfwEF1MNcM2DQRgJi8rMP9ebc3Jox30Pl5MkvWWROisGCe005LmXef6hDgW0R2Tu9khQo8B7KshpR_Q9eaV2lq-pjsAgInJpUkEz6uxPvWllsXTuHOZqq0g7y6jDjfcX1gUlsy2RK6EW5_bT3g-Rqg_dTYo01JOsh-KNEMguB2xsuoky0Mp9CyeFwGMa9k9yvgXwuCEzqzgObCKEiLg9uVCYxoGc"/>
-</div>
-<h3 className="font-headline-sm text-headline-sm text-on-surface">FJ Watch Active</h3>
-</div>
-</div>
-{/* Price Row */}
-<div className="comparison-grid border-b border-border-subtle group hover:bg-surface-container-low transition-colors duration-200">
-<div className="p-6 flex items-center gap-3">
-<span className="material-symbols-outlined text-primary">payments</span>
-<span className="font-body-md font-bold">Price</span>
-</div>
-<div className="p-6 text-center border-l border-border-subtle font-headline-sm text-primary">$1,199.00</div>
-<div className="p-6 text-center border-l border-border-subtle font-headline-sm text-primary">$349.00</div>
-<div className="p-6 text-center border-l border-border-subtle font-headline-sm text-primary">$499.00</div>
-</div>
-{/* Display/Audio Row */}
-<div className="comparison-grid border-b border-border-subtle group hover:bg-surface-container-low transition-colors duration-200">
-<div className="p-6 flex items-center gap-3">
-<span className="material-symbols-outlined text-primary">visibility</span>
-<span className="font-body-md font-bold">Display / Audio</span>
-</div>
-<div className="p-6 text-center border-l border-border-subtle text-on-surface-variant">6.7" Super Retina XDR, ProMotion 120Hz</div>
-<div className="p-6 text-center border-l border-border-subtle text-on-surface-variant">Spatial Audio with Dynamic Head Tracking</div>
-<div className="p-6 text-center border-l border-border-subtle text-on-surface-variant">1.5" LTPO OLED, Always-On Display, 2000 nits</div>
-</div>
-{/* Processor Row */}
-<div className="comparison-grid border-b border-border-subtle group hover:bg-surface-container-low transition-colors duration-200">
-<div className="p-6 flex items-center gap-3">
-<span className="material-symbols-outlined text-primary">memory</span>
-<span className="font-body-md font-bold">Processor</span>
-</div>
-<div className="p-6 text-center border-l border-border-subtle text-on-surface-variant">A17 Pro Bionic (3nm architecture)</div>
-<div className="p-6 text-center border-l border-border-subtle text-on-surface-variant">H2 Adaptive Silicon for Neural Audio</div>
-<div className="p-6 text-center border-l border-border-subtle text-on-surface-variant">S9 SiP with 4-core Neural Engine</div>
-</div>
-{/* Battery Row */}
-<div className="comparison-grid border-b border-border-subtle group hover:bg-surface-container-low transition-colors duration-200">
-<div className="p-6 flex items-center gap-3">
-<span className="material-symbols-outlined text-primary">battery_charging_full</span>
-<span className="font-body-md font-bold">Battery Life</span>
-</div>
-<div className="p-6 text-center border-l border-border-subtle text-on-surface-variant">29h Video Playback / Fast Charging</div>
-<div className="p-6 text-center border-l border-border-subtle text-on-surface-variant">40h Listening Time with ANC</div>
-<div className="p-6 text-center border-l border-border-subtle text-on-surface-variant">36h Normal Use / 72h Low Power Mode</div>
-</div>
-{/* Connectivity Row */}
-<div className="comparison-grid border-b border-border-subtle group hover:bg-surface-container-low transition-colors duration-200">
-<div className="p-6 flex items-center gap-3">
-<span className="material-symbols-outlined text-primary">signal_cellular_alt</span>
-<span className="font-body-md font-bold">Connectivity</span>
-</div>
-<div className="p-6 text-center border-l border-border-subtle text-on-surface-variant">5G Ultra Wideband, Wi-Fi 6E, USB-C 3.0</div>
-<div className="p-6 text-center border-l border-border-subtle text-on-surface-variant">Bluetooth 5.3, Ultra Wideband chip</div>
-<div className="p-6 text-center border-l border-border-subtle text-on-surface-variant">L1/L5 Dual-band GPS, Cellular + Wi-Fi</div>
-</div>
-{/* Key Features Row */}
-<div className="comparison-grid border-b border-border-subtle group hover:bg-surface-container-low transition-colors duration-200">
-<div className="p-6 flex items-center gap-3">
-<span className="material-symbols-outlined text-primary">auto_awesome</span>
-<span className="font-body-md font-bold">Key Features</span>
-</div>
-<div className="p-6 text-center border-l border-border-subtle text-on-surface-variant text-body-sm px-4">
-                        48MP Pro Main Camera, Titanium Frame, Action Button customization.
-                    </div>
-<div className="p-6 text-center border-l border-border-subtle text-on-surface-variant text-body-sm px-4">
-                        Active Noise Cancellation 2.0, Transparency Mode, IPX4 Water Resistance.
-                    </div>
-<div className="p-6 text-center border-l border-border-subtle text-on-surface-variant text-body-sm px-4">
-                        ECG App, Blood Oxygen monitoring, Crash Detection, Titanium Case.
-                    </div>
-</div>
-{/* Actions Row */}
-<div className="comparison-grid bg-surface-container-low/50">
-<div className="p-6"></div>
-<div className="p-8 border-l border-border-subtle flex justify-center">
-<button className="w-full max-w-[200px] bg-primary text-on-primary px-6 py-3 rounded-lg font-bold flex items-center justify-center gap-2 hover:bg-on-primary-fixed-variant transition-all duration-300 shadow-sm active:scale-95 group" >
-<span className="material-symbols-outlined text-[20px]">shopping_cart</span>
-                            Add to Cart
-                        </button>
-</div>
-<div className="p-8 border-l border-border-subtle flex justify-center">
-<button className="w-full max-w-[200px] bg-primary text-on-primary px-6 py-3 rounded-lg font-bold flex items-center justify-center gap-2 hover:bg-on-primary-fixed-variant transition-all duration-300 shadow-sm active:scale-95 group" >
-<span className="material-symbols-outlined text-[20px]">shopping_cart</span>
-                            Add to Cart
-                        </button>
-</div>
-<div className="p-8 border-l border-border-subtle flex justify-center">
-<button className="w-full max-w-[200px] bg-primary text-on-primary px-6 py-3 rounded-lg font-bold flex items-center justify-center gap-2 hover:bg-on-primary-fixed-variant transition-all duration-300 shadow-sm active:scale-95 group" >
-<span className="material-symbols-outlined text-[20px]">shopping_cart</span>
-                            Add to Cart
-                        </button>
-</div>
-</div>
-</div>
-</section>
-{/* Newsletter / Support */}
-<section className="max-w-container-max mx-auto px-margin-desktop mt-24">
-<div className="bg-primary rounded-xl p-12 text-on-primary flex flex-col md:flex-row items-center justify-between gap-8 relative overflow-hidden">
-{/* Abstract Background Pattern */}
-<div className="absolute inset-0 opacity-10 pointer-events-none">
-<div className="absolute top-0 right-0 w-96 h-96 bg-on-primary rounded-full blur-[100px] -mr-48 -mt-48"></div>
-<div className="absolute bottom-0 left-0 w-64 h-64 bg-on-primary rounded-full blur-[80px] -ml-32 -mb-32"></div>
-</div>
-<div className="relative z-10">
-<h2 className="font-headline-md text-headline-md mb-2">Still undecided?</h2>
-<p className="opacity-90 max-w-md">Our global consulting team can help you build the perfect hardware stack for your enterprise needs.</p>
-</div>
-<div className="relative z-10 flex gap-4">
-<button className="bg-on-primary text-primary px-8 py-3 rounded-lg font-bold hover:bg-primary-fixed transition-all active:scale-95">Speak to an Expert</button>
-<button className="border border-on-primary text-on-primary px-8 py-3 rounded-lg font-bold hover:bg-on-primary/10 transition-all active:scale-95">Download PDF Specs</button>
-</div>
-</div>
-</section>
-</main>
-{/* Footer */}
-<footer className="w-full py-12 bg-surface-muted border-t border-border-subtle">
-<div className="flex flex-col md:flex-row justify-between items-center px-margin-desktop max-w-container-max mx-auto gap-8">
-<div className="flex flex-col gap-4">
-<span className="font-headline-sm text-headline-sm font-bold text-on-surface">GlobalTrade</span>
-<p className="font-body-sm text-body-sm text-on-surface-variant">© 2024 GlobalTrade Enterprise. All rights reserved.</p>
-</div>
-<div className="flex gap-8">
-<Link className="text-on-surface-variant hover:text-primary underline transition-all duration-300 font-body-sm text-body-sm" href="#">Privacy Policy</Link>
-<Link className="text-on-surface-variant hover:text-primary underline transition-all duration-300 font-body-sm text-body-sm" href="#">Terms of Service</Link>
-<Link className="text-on-surface-variant hover:text-primary underline transition-all duration-300 font-body-sm text-body-sm" href="#">Compliance</Link>
-<Link className="text-on-surface-variant hover:text-primary underline transition-all duration-300 font-body-sm text-body-sm" href="#">Global Support</Link>
-</div>
-</div>
-</footer>
-{/* Simple Interaction Toast */}
-<div className="fixed bottom-8 right-8 bg-inverse-surface text-inverse-on-surface px-6 py-4 rounded-xl shadow-xl transform translate-y-24 transition-transform duration-300 z-[100] flex items-center gap-3" id="toast">
-<span className="material-symbols-outlined text-primary-fixed">check_circle</span>
-<span id="toast-message">Added to cart!</span>
-</div>
+      <div className="mb-8 max-w-2xl">
+        <h1 className="font-display text-3xl font-medium sm:text-4xl">{t("compare.title")}</h1>
+        <p className="mt-3 text-sm leading-relaxed text-muted-foreground sm:text-base">{t("compare.subtitle")}</p>
+      </div>
 
+      {/* Picker */}
+      <div className="mb-8 rounded-2xl border border-border bg-card p-5 shadow-card">
+        <p className="mb-3 text-[11px] font-medium text-muted-foreground">
+          {t("compare.pick")}
+        </p>
+        {loading ? (
+          <div className="flex flex-wrap gap-2">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div key={i} className="h-8 w-28 animate-pulse rounded-md bg-muted" />
+            ))}
+          </div>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {all.map((p) => {
+              const on = picked.includes(p.id);
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => toggle(p.id)}
+                  className={cn("inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-[12.5px] font-medium transition-colors duration-200",
+                    on ? "border-primary bg-primary-soft text-primary" : "border-border text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {on ? <Check className="h-3.5 w-3.5" weight="bold" /> : null}
+                  <span className="max-w-[180px] truncate">{loc(p, "title")}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
 
-  </Fragment>
-  )
+      {selected.length < 2 ? (
+        <div className="rounded-3xl border border-border bg-card py-20 text-center shadow-card">
+          <p className="text-sm text-muted-foreground">{t("compare.empty")}</p>
+          <Button asChild variant="outline" className="mt-5">
+            <Link href="/products">
+              {t("home.hero.cta.primary")}
+              <ArrowRight className="ml-1 h-4 w-4" />
+            </Link>
+          </Button>
+        </div>
+      ) : (
+        <div className="overflow-x-auto rounded-3xl border border-border bg-card shadow-card">
+          <table className="w-full min-w-[640px] border-collapse text-sm">
+            <thead>
+              <tr>
+                <th className="w-32 border-b border-border p-4 text-left align-bottom text-[11px] font-medium text-muted-foreground">
+                  {t("compare.spec")}
+                </th>
+                {selected.map((p) => (
+                  <th key={p.id} className="border-b border-l border-border p-4 align-top">
+                    <div className="group">
+                      <div className="relative mb-3 aspect-[4/3] overflow-hidden rounded-xl border border-border">
+                        {p.image_key ? (
+                          <Image src={p.image_key} alt={loc(p, "title")} fill sizes="240px" className="object-cover" />
+                        ) : (
+                          <div className="absolute inset-0 bg-muted" />
+                        )}
+                        <button
+                          onClick={() => toggle(p.id)}
+                          aria-label={t("cart.remove")}
+                          className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-md bg-card/90 text-muted-foreground shadow-card backdrop-blur-md transition-colors hover:text-foreground"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                      <Link
+                        href={`/products/${p.id}`}
+                        className="block text-left font-display text-[14px] font-medium leading-snug transition-colors hover:text-primary line-clamp-2"
+                      >
+                        {loc(p, "title")}
+                      </Link>
+                    </div>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr key={row.key} className="transition-colors hover:bg-muted/40">
+                  <td className="border-b border-border-subtle p-4 text-[12.5px] font-medium text-muted-foreground">
+                    {row.label}
+                  </td>
+                  {selected.map((p) => (
+                    <td key={p.id} className="border-b border-l border-border-subtle p-4 align-middle">
+                      {row.render(p)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+              <tr>
+                <td className="p-4 align-top text-[12.5px] font-medium text-muted-foreground">
+                  {t("product.recommendations")}
+                </td>
+                {selected.map((p) => {
+                  const list = (locale === "zh" ? p.highlights : p.highlights_en || p.highlights) ?? [];
+                  return (
+                    <td key={p.id} className="border-l border-border-subtle p-4 align-top">
+                      <ul className="space-y-2">
+                        {list.slice(0, 3).map((h) => (
+                          <li key={h} className="flex gap-2 text-[12.5px] leading-relaxed">
+                            <Check className="mt-1 h-3.5 w-3.5 shrink-0 text-emerald-600" weight="bold" />
+                            <span>{h}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </td>
+                  );
+                })}
+              </tr>
+              <tr>
+                <td className="p-4" />
+                {selected.map((p) => (
+                  <td key={p.id} className="border-l border-border-subtle p-4">
+                    <div className="flex flex-col gap-2">
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          addItem({ id: p.id, title: loc(p, "title"), price: Number(p.price), type: p.type });
+                          toast.success(t("product.add_to_cart_success"));
+                        }}
+                      >
+                        <ShoppingCart className="h-3.5 w-3.5" />
+                        {t("compare.add")}
+                      </Button>
+                      <Button asChild size="sm" variant="outline">
+                        <Link href={`/products/${p.id}`}>{t("compare.view")}</Link>
+                      </Button>
+                    </div>
+                  </td>
+                ))}
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
 }

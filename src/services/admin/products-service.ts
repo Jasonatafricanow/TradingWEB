@@ -3,6 +3,7 @@ import { eq, and, isNull, inArray } from 'drizzle-orm';
 import { products, inventory } from '@/storage/database/shared/schema';
 import { randomUUID } from 'node:crypto';
 import { IS_DEMO_MODE } from '@/config/constants';
+import { DEMO_PRODUCTS as CATALOG_PRODUCTS } from '@/lib/demo/catalog';
 
 interface MockProduct {
   id: string; title?: string; title_en?: string; title_pt?: string; title_ja?: string; title_es?: string;
@@ -32,13 +33,7 @@ interface BulkCatalogUpdate {
   };
 }
 
-const MOCK_PRODUCTS: MockProduct[] = [
-  { id: 'prod-1', title: '跨境电商战略咨询', title_en: 'Cross-Border E-Commerce Strategy', title_ja: '越境EC戦略', title_es: 'Estrategia de Comercio Electrónico Transfronterizo', description: '一对一专业咨询', description_en: 'One-on-one consulting', description_ja: '一対一の専門コンサルティング', description_es: 'Consultoría individual', price: '299.00', category_id: 'cat-1', category_name: '商业咨询', type: 'service', status: 'active', duration: '60min', delivery_method: 'online', cost_price: '150.00', vendor: 'GlobalTrade', tags: 'consulting,strategy', created_at: new Date().toISOString() },
-  { id: 'prod-2', title: '市场进入策略分析', title_en: 'Market Entry Strategy', title_ja: '市場参入戦略', title_es: 'Estrategia de Entrada al Mercado', description: '深入分析目标市场', description_en: 'In-depth market analysis', description_ja: 'ターゲット市場の詳細分析', description_es: 'Análisis profundo del mercado', price: '499.00', category_id: 'cat-1', category_name: '商业咨询', type: 'service', status: 'active', duration: '90min', delivery_method: 'online', cost_price: '250.00', created_at: new Date().toISOString() },
-  { id: 'prod-9', title: '商业计划书模板', title_en: 'Business Plan Template', title_ja: 'ビジネスプランテンプレート', title_es: 'Plantilla de Plan de Negocios', description: '专业商业计划书模板', description_en: 'Professional business plan template', description_ja: 'プロフェッショナルなビジネスプランテンプレート', description_es: 'Plantilla profesional de plan de negocios', price: '29.00', category_id: 'cat-4', category_name: '数字模板', type: 'virtual', status: 'active', duration: null, delivery_method: 'download', cost_price: '10.00', created_at: new Date().toISOString() },
-  { id: 'prod-10', title: '财务模型 Excel 模板', title_en: 'Financial Model Excel Template', category_name: '数字模板', type: 'virtual', status: 'active', price: '49.00', delivery_method: 'download', duration: null, created_at: new Date().toISOString() },
-  { id: 'prod-12', title: '跨境电商实战课程', category_name: '在线课程', type: 'virtual', status: 'active', price: '199.00', delivery_method: 'email', duration: null, created_at: new Date().toISOString() },
-];
+const MOCK_PRODUCTS: MockProduct[] = CATALOG_PRODUCTS.map((p) => ({ ...p })) as unknown as MockProduct[];
 
 function normalizeAdminProductRow(row: Record<string, unknown>) {
   const categoryId = row.category_ref_id ? String(row.category_ref_id) : "";

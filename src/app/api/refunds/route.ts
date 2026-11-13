@@ -15,6 +15,16 @@ export async function POST(request: NextRequest) {
     if (!order_id || !reason) {
       return NextResponse.json({ error: "order_id and reason are required" }, { status: 400 })
     }
+    const { IS_DEMO_MODE } = await import("@/config/constants")
+    if (IS_DEMO_MODE) {
+      const { demoGetOrder, demoCreateRefund } = await import("@/lib/demo/commerce")
+      const o = demoGetOrder(order_id)
+      if (!o) return NextResponse.json({ error: "Order not found" }, { status: 404 })
+      if (o.user_id !== user.id) return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
+      if (o.has_refund) return NextResponse.json({ error: "Refund already requested" }, { status: 409 })
+      if (o.status !== "paid" && o.status !== "processing") return NextResponse.json({ error: "Order cannot be refunded" }, { status: 400 })
+      return NextResponse.json({ data: demoCreateRefund(order_id, reason) })
+    }
 
     // 验证订单属于当前用户
     const [order] = await db.select().from(orders).where(eq(orders.id, order_id)).limit(1);

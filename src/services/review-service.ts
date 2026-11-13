@@ -2,8 +2,17 @@ import { db } from '@/lib/db';
 import { eq, desc, and, like, or, sql } from 'drizzle-orm';
 import { products, productReviews } from '@/storage/database/shared/schema';
 import { randomUUID } from 'node:crypto';
+import { IS_DEMO_MODE } from '@/config/constants';
+import { demoReviews, demoProduct } from '@/lib/demo/catalog';
+
+/** 演示模式下新提交的评价（进程内保存，便于演示提交后立即看到） */
+const demoSubmitted: Array<Record<string, unknown>> = [];
 
 export async function getProductReviews(productId: string) {
+  if (IS_DEMO_MODE) {
+    const submitted = demoSubmitted.filter((r) => r.product_id === productId);
+    return { data: [...submitted, ...demoReviews(productId)], error: null };
+  }
   try {
     const data = await db.select().from(productReviews)
       .where(and(eq(productReviews.product_id, productId), eq(productReviews.is_approved, true)))
@@ -17,6 +26,22 @@ export async function getProductReviews(productId: string) {
 export async function createReview(input: {
   product_id: string; user_id: string; rating: number; title?: string; content?: string; is_verified?: boolean
 }) {
+  if (IS_DEMO_MODE) {
+    if (!demoProduct(input.product_id)) throw new Error('Product not found');
+    if (demoSubmitted.some((r) => r.product_id === input.product_id && r.user_id === input.user_id)) {
+      throw new Error('You have already reviewed this product');
+    }
+    const row = {
+      id: randomUUID(),
+      ...input,
+      author: 'You',
+      is_verified: input.is_verified ?? true,
+      is_approved: true,
+      created_at: new Date().toISOString(),
+    };
+    demoSubmitted.unshift(row);
+    return row;
+  }
   try {
     const [product] = await db.select({ id: products.id }).from(products)
       .where(and(eq(products.id, input.product_id), eq(products.status, 'active')))

@@ -3,6 +3,7 @@ import Script from 'next/script';
 import localFont from 'next/font/local';
 import './globals.css';
 import { ClientProviders } from '@/components/client-providers';
+import { themeInitScript } from '@/lib/theme-init';
 import { organizationJsonLd } from '@/lib/seo';
 import { db } from '@/lib/db';
 
@@ -54,7 +55,9 @@ export default async function RootLayout({
 
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`antialiased theme-${activeTheme} ${geist.variable} ${hankenGrotesk.variable} ${jetbrainsMono.variable} ${playfair.variable}`}>
+      <body suppressHydrationWarning className={`antialiased theme-${activeTheme} ${geist.variable} ${hankenGrotesk.variable} ${jetbrainsMono.variable} ${playfair.variable}`}>
+        {/* 色彩模式初始化：hydration 前执行，避免暗色闪烁 */}
+        <Script id="gt-color-mode" strategy="beforeInteractive">{themeInitScript}</Script>
         {process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ? (
           <Script src="https://accounts.google.com/gsi/client" strategy="afterInteractive" />
         ) : null}
@@ -73,5 +76,3 @@ export default async function RootLayout({
     </html>
   );
 }
-
-

@@ -11,6 +11,14 @@ import { emptyToNull, dateOrNull, logDbError } from '@/lib/sanitize';
 import { OrderStatus, FinancialStatus, PaymentStatus } from '@/lib/enums';
 import { deductInventoryForOrderInTransaction } from './order-stock-service';
 import { insertOrderTimeline } from './order-timeline';
+import { IS_DEMO_MODE } from '@/config/constants';
+import * as demoCommerce from '@/lib/demo/commerce';
+
+/** 演示模式：把内存订单整形为与数据库行一致的形状 */
+function demoShape(o: ReturnType<typeof demoCommerce.demoGetOrder>) {
+  if (!o) return null;
+  return { ...o, items: o.order_items, order_items: o.order_items };
+}
 
 interface PricedOrderItem {
   id: string;
@@ -49,6 +57,9 @@ export async function createOrder(input: {
   delivery_date?: string;
   delivery_time_slot?: string;
 }) {
+  if (IS_DEMO_MODE) {
+    return demoCommerce.demoCreateOrder(input) as never;
+  }
   const orderId = randomUUID();
   const orderNo = generateOrderNo();
   const normalizedItems = input.items.map((item) => ({
@@ -254,6 +265,7 @@ const [countRows] = await db.$client.execute(
 }
 
 export async function getOrder(orderId: string) {
+  if (IS_DEMO_MODE) return demoShape(demoCommerce.demoGetOrder(orderId)) as never;
   try {
     const [order] = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
     if (!order) return null;
@@ -265,6 +277,7 @@ export async function getOrder(orderId: string) {
 }
 
 export async function getOrderByNo(orderNo: string) {
+  if (IS_DEMO_MODE) return demoShape(demoCommerce.demoGetOrder(orderNo)) as never;
   try {
     const [order] = await db.select().from(orders).where(eq(orders.order_no, orderNo)).limit(1);
     if (!order) return null;
@@ -276,6 +289,10 @@ export async function getOrderByNo(orderNo: string) {
 }
 
 export async function listUserOrders(userId: string, status?: string) {
+  if (IS_DEMO_MODE) {
+    const rows = demoCommerce.demoListOrders(userId, status).map((o) => demoShape(o));
+    return { data: rows } as never;
+  }
   try {
     const where = status
       ? and(eq(orders.user_id, userId), eq(orders.status, status))
@@ -303,6 +320,13 @@ export async function getOrderForPayment(orderId: string, userId: string) {
 }
 
 export async function updateOrderStatus(orderId: string, status?: string, financial_status?: string, fulfillment_status?: string, payment_status?: string, payment_id?: string) {
+  if (IS_DEMO_MODE) {
+    if (payment_status === 'paid' || financial_status === 'paid') {
+      return demoCommerce.demoMarkOrderPaid(orderId) as never;
+    }
+    if (status) return demoCommerce.demoUpdateOrderStatus(orderId, status) as never;
+    return demoCommerce.demoGetOrder(orderId) as never;
+  }
   try {
     const updateData: Record<string, unknown> = {};
     if (status !== undefined) updateData.status = status;

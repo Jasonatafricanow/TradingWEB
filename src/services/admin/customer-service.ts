@@ -40,6 +40,18 @@ export async function listCustomers(options?: {
   offset?: number;
   search?: string;
 }) {
+  const { IS_DEMO_MODE } = await import('@/config/constants');
+  if (IS_DEMO_MODE) {
+    const m = await import('@/lib/demo/commerce');
+    let rows = m.demoCustomers(12);
+    if (options?.search) {
+      const q = options.search.toLowerCase();
+      rows = rows.filter((r) => r.name.toLowerCase().includes(q) || r.email.toLowerCase().includes(q));
+    }
+    const lim = Math.min(200, Math.max(1, options?.limit ?? 50));
+    const off = Math.max(0, options?.offset ?? 0);
+    return { data: rows.slice(off, off+lim), total: rows.length, error: null } as never;
+  }
   const limit = Math.min(200, Math.max(1, options?.limit ?? 50));
   const offset = Math.max(0, options?.offset ?? 0);
   const search = options?.search?.trim();

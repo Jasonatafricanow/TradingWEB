@@ -17,6 +17,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "valid amount is required" }, { status: 400 })
     }
 
+    const { IS_DEMO_MODE } = await import('@/config/constants')
+    if (IS_DEMO_MODE) {
+      const { demoValidateCoupon } = await import('@/lib/demo/commerce')
+      return NextResponse.json(demoValidateCoupon(code.slice(0, 100), amount))
+    }
     const result = await validateCoupon(code.slice(0, 100), amount)
     return NextResponse.json(result)
   } catch (err) {

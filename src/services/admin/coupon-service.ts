@@ -91,6 +91,12 @@ export async function listCoupons(options: {
   search?: string;
   isActive?: boolean;
 } = {}) {
+  const { IS_DEMO_MODE } = await import('@/config/constants');
+  if (IS_DEMO_MODE) {
+    const { demoStore } = await import('@/lib/demo/commerce');
+    const rows = demoStore().coupons.map((c) => ({ ...c, value: c.discount, usage_count: c.is_used ? 1 : 0, usage_limit: 1000, is_active: !c.is_used }));
+    return { data: rows, total: rows.length } as never;
+  }
   try {
     const page = Math.max(1, Math.floor(options.page ?? 1));
     const pageSize = Math.min(200, Math.max(1, Math.floor(options.pageSize ?? 50)));

@@ -6,10 +6,11 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const type = searchParams.get("type") || undefined;
     const category = searchParams.get("category") || undefined;
+    const sort = searchParams.get("sort") || undefined;
     const rawLimit = Number(searchParams.get("limit"));
     const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? rawLimit : undefined;
 
-    const result = await listActiveProducts({ type, category, limit });
+    const result = await listActiveProducts({ type, category, limit, sort });
     return NextResponse.json(result);
   } catch (err) {
     const message = err instanceof Error ? (err as Error).message : "Unknown error";

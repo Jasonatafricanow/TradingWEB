@@ -12,6 +12,10 @@ import { Toaster } from "@/components/ui/sonner";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { VersionUpdateNotifier } from "@/components/version-update-notifier";
 import { PortalContainerInit } from "@/lib/portal-utils";
+import { UIProvider } from "@/contexts/ui-context";
+import { CommandPalette } from "@/components/command-palette";
+import { CartDrawer } from "@/components/cart-drawer";
+import { ScrollProgress, BackToTop } from "@/components/motion";
 
 /** 页面访问埋点 */
 function PageViewTracker() {
@@ -173,6 +177,11 @@ function AppShell({ children }: { children: React.ReactNode }) {
 import { ThemeProvider } from "@/contexts/theme-context";
 
 export function ClientProviders({ children, activeTheme }: { children: React.ReactNode; activeTheme: string }) {
+  // JS 就绪标记：入场动画仅在脚本可用时启用，无 JS 环境正文保持完整可见
+  useEffect(() => {
+    document.documentElement.classList.add("js");
+  }, []);
+
   // 全局安全网：捕获 DOM removeChild 错误（Radix Portal 竞争条件）
   useEffect(() => {
     const handler = (event: ErrorEvent) => {
@@ -201,13 +210,19 @@ export function ClientProviders({ children, activeTheme }: { children: React.Rea
       <AuthProvider>
         <CartProvider>
           <ThemeProvider theme={activeTheme}>
+            <UIProvider>
             <PageViewTracker />
             <AuthenticatedFetchBridge />
             <VersionUpdateNotifier />
             <AppShell>
               {children}
             </AppShell>
-            <Toaster duration={6000} />
+            <CommandPalette />
+            <CartDrawer />
+            <ScrollProgress />
+            <BackToTop />
+            <Toaster duration={5000} />
+            </UIProvider>
           </ThemeProvider>
         </CartProvider>
       </AuthProvider>

@@ -54,6 +54,15 @@ function normalizeChannel(value: unknown): string {
 }
 
 export async function getSalesSummary(days = 30): Promise<SalesSummary> {
+  const { IS_DEMO_MODE } = await import('@/config/constants');
+  if (IS_DEMO_MODE) {
+    const m = await import('@/lib/demo/commerce');
+    const series = m.demoRevenueSeries(days);
+    const totalRevenue = series.reduce((s, d) => s + d.revenue, 0);
+    const totalOrders = series.reduce((s, d) => s + d.orders, 0);
+    const totalRefunds = Math.round(totalRevenue * 0.021);
+    return { totalRevenue, totalOrders, totalRefunds, refundRate: Number(((totalRefunds / totalRevenue) * 100).toFixed(2)), avgOrderValue: Number((totalRevenue / totalOrders).toFixed(2)) };
+  }
   const start = daysAgo(days);
 
   const [rows] = await db.$client.execute(
@@ -89,6 +98,13 @@ export async function getSalesSummary(days = 30): Promise<SalesSummary> {
 }
 
 export async function getChannelBreakdown(days: number): Promise<ChannelBreakdown[]> {
+  const { IS_DEMO_MODE } = await import('@/config/constants');
+  if (IS_DEMO_MODE) {
+    const m = await import('@/lib/demo/commerce');
+    const total = m.demoRevenueSeries(days).reduce((s, d) => s + d.revenue, 0);
+    const rows = [['web','Online Store',0.52],['pos','POS',0.18],['whatsapp','WhatsApp',0.12],['facebook','Facebook',0.09],['instagram','Instagram',0.06],['direct','Direct Visit',0.03]] as const;
+    return rows.map(([source,label,share]) => { const rev = Math.round(total*share); const ord = Math.max(1,Math.round(rev/172)); return { source, label, total_revenue: rev, total_orders: ord, avg_order_value: Number((rev/ord).toFixed(2)), revenue_share: Number((share*100).toFixed(1)) }; });
+  }
   const [rows] = await db.$client.execute(
     `SELECT COALESCE(NULLIF(source, ''), 'web') as source, COUNT(*) as total_orders, ` +
     `COALESCE(SUM(total_amount), 0) as total_revenue, COALESCE(AVG(total_amount), 0) as avg_order_value ` +
@@ -115,6 +131,11 @@ export async function getChannelBreakdown(days: number): Promise<ChannelBreakdow
 }
 
 export async function getProductSalesRank(days: number, limit = 50): Promise<ProductRank[]> {
+  const { IS_DEMO_MODE } = await import('@/config/constants');
+  if (IS_DEMO_MODE) {
+    const m = await import('@/lib/demo/commerce');
+    return m.demoTopProducts(limit).map((p) => ({ product_id: p.id, product_title: p.title, product_type: p.type, total_quantity: p.quantity, total_revenue: Number(p.revenue), order_count: p.orders }));
+  }
   const [rows] = await db.$client.execute(
     `SELECT oi.product_id, oi.product_title, oi.product_type, ` +
     `SUM(oi.quantity) as total_quantity, COALESCE(SUM(oi.subtotal), 0) as total_revenue, ` +
@@ -136,6 +157,11 @@ export async function getProductSalesRank(days: number, limit = 50): Promise<Pro
 }
 
 export async function getRevenueTrend(days: number): Promise<RevenueTrendPoint[]> {
+  const { IS_DEMO_MODE } = await import('@/config/constants');
+  if (IS_DEMO_MODE) {
+    const m = await import('@/lib/demo/commerce');
+    return m.demoRevenueSeries(days);
+  }
   const [rows] = await db.$client.execute(
     `SELECT DATE_FORMAT(created_at, '%Y-%m-%d') as date, COUNT(*) as orders, ` +
     `COALESCE(SUM(total_amount), 0) as revenue ` +
@@ -151,6 +177,12 @@ export async function getRevenueTrend(days: number): Promise<RevenueTrendPoint[]
 }
 
 export async function exportSalesCsv(days: number): Promise<string> {
+  const { IS_DEMO_MODE } = await import('@/config/constants');
+  if (IS_DEMO_MODE) {
+    const m = await import('@/lib/demo/commerce');
+    const rows = m.demoRevenueSeries(days).map((d) => [d.date, String(d.revenue), String(d.orders)]);
+    return toCsv([['date','revenue','orders'], ...rows]);
+  }
   const [summary, ranks, channels] = await Promise.all([
     getSalesSummary(days),
     getProductSalesRank(days),

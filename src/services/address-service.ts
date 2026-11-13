@@ -1,6 +1,8 @@
 import { db } from "@/lib/db"
 import { and, eq, desc } from "drizzle-orm"
 import { customerAddresses } from "@/storage/database/shared/schema"
+import { IS_DEMO_MODE } from "@/config/constants"
+import * as demoCommerce from "@/lib/demo/commerce"
 
 export interface AddressInput {
   label?: string
@@ -15,6 +17,7 @@ export interface AddressInput {
 }
 
 export async function listAddresses(userId: string) {
+  if (IS_DEMO_MODE) return { data: demoCommerce.demoListAddresses(userId), error: null }
   try {
     const data = await db.select().from(customerAddresses)
       .where(eq(customerAddresses.user_id, userId))
@@ -26,6 +29,7 @@ export async function listAddresses(userId: string) {
 }
 
 export async function createAddress(userId: string, input: AddressInput) {
+  if (IS_DEMO_MODE) return demoCommerce.demoSaveAddress(userId, input) as never
   try {
     if (input.is_default) {
       await db.update(customerAddresses).set({ is_default: false } ).where(eq(customerAddresses.user_id, userId))
@@ -40,6 +44,7 @@ export async function createAddress(userId: string, input: AddressInput) {
 }
 
 export async function updateAddress(addressId: string, userId: string, input: Partial<AddressInput>) {
+  if (IS_DEMO_MODE) return demoCommerce.demoSaveAddress(userId, { ...input, id: addressId }) as never
   try {
     if (input.is_default) {
       await db.update(customerAddresses).set({ is_default: false } ).where(eq(customerAddresses.user_id, userId))
@@ -57,6 +62,7 @@ export async function updateAddress(addressId: string, userId: string, input: Pa
 }
 
 export async function deleteAddress(addressId: string, userId: string) {
+  if (IS_DEMO_MODE) { demoCommerce.demoDeleteAddress(userId, addressId); return }
   try {
     await db.delete(customerAddresses).where(
       and(eq(customerAddresses.id, addressId), eq(customerAddresses.user_id, userId))

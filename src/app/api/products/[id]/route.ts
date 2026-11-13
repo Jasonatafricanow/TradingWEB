@@ -26,7 +26,15 @@ export async function GET(
       : null;
 
     const images = IS_DEMO_MODE
-      ? []
+      ? ((data as { gallery?: string[] }).gallery ?? []).map((src, i) => ({
+          id: `${id}-img-${i + 1}`,
+          src,
+          original_url: src,
+          alt: (data as { title?: string }).title ?? "",
+          variant_id: null,
+          position: i + 1,
+          mirror_status: "local",
+        }))
       : await (async () => {
           const [{ db }, { productImages }] = await Promise.all([
             import("@/lib/db"),

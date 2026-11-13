@@ -2,14 +2,12 @@
 
 import Link from "next/link";
 import { useI18n } from "@/contexts/i18n-context";
-import { Globe, ArrowUpRight } from "@phosphor-icons/react";
+import { ArrowUpRight, Envelope, ChatCircle } from "@phosphor-icons/react";
 import { LOCALES } from "@/config/locale";
 import type { Locale } from "@/contexts/i18n-context";
 import { cn } from "@/lib/utils";
-import { Envelope, ChatCircle } from "@phosphor-icons/react";
 
 const localeLabels: Record<Locale, string> = Object.fromEntries(LOCALES.map(l => [l.code, l.label])) as Record<Locale, string>;
-const localeFlags: Record<Locale, string> = Object.fromEntries(LOCALES.map(l => [l.code, l.flag])) as Record<Locale, string>;
 
 const FOOTER_NAV = [
   { titleKey: "nav.products", links: [
@@ -32,20 +30,18 @@ export function ShopifyFooter() {
   const { t, locale, setLocale } = useI18n();
 
   return (
-    <footer className="bg-slate-900 border-t border-slate-800 text-slate-300">
+    <footer className="bg-[var(--footer-bg)] text-[var(--footer-fg)]">
       <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 gap-12 md:grid-cols-4">
-          
-          {/* Brand Col */}
+          {/* Brand */}
           <div className="md:col-span-1">
-            <span className="font-serif text-xl font-bold tracking-wider text-white uppercase">
+            <span className="font-display text-lg font-medium text-white">
               GlobalTrade Hub
             </span>
-            <p className="mt-4 text-xs leading-relaxed text-slate-400">
-              面向国际贸易领域的专业商业咨询服务与高质量数字化模板交易平台。
+            <p className="mt-4 text-[13px] leading-relaxed text-[var(--footer-muted)]">
+              {t("footer.tagline")}
             </p>
-            {/* Social links */}
-            <div className="mt-6 flex gap-3">
+            <div className="mt-6 flex gap-2">
               {SOCIAL_LINKS.map(({ icon: Icon, href, label }) => (
                 <a
                   key={label}
@@ -53,9 +49,9 @@ export function ShopifyFooter() {
                   target="_blank"
                   rel="noopener noreferrer"
                   aria-label={label}
-                  className="flex h-9 w-9 items-center justify-center border border-slate-700 bg-slate-800 text-slate-400 transition-colors hover:border-slate-500 hover:text-white"
+                  className="flex h-9 w-9 items-center justify-center rounded-md border border-[var(--footer-border)] bg-white/5 text-[var(--footer-muted)] transition-colors duration-200 hover:border-white/30 hover:text-white"
                 >
-                  <Icon className="h-4.5 w-4.5" />
+                  <Icon className="h-4 w-4" />
                 </a>
               ))}
             </div>
@@ -64,7 +60,7 @@ export function ShopifyFooter() {
           {/* Nav columns */}
           {FOOTER_NAV.map(({ titleKey, links }) => (
             <div key={titleKey}>
-              <h3 className="text-xs font-bold uppercase tracking-wider text-white">
+              <h3 className="text-xs font-medium text-white">
                 {t(titleKey)}
               </h3>
               <ul className="mt-4 space-y-3">
@@ -72,10 +68,10 @@ export function ShopifyFooter() {
                   <li key={href}>
                     <Link
                       href={href}
-                      className="group inline-flex items-center gap-1 text-xs text-slate-400 hover:text-white transition-colors"
+                      className="group inline-flex items-center gap-1 text-[13px] text-[var(--footer-muted)] transition-colors duration-200 hover:text-white"
                     >
                       {t(labelKey)}
-                      <ArrowUpRight className="h-3 w-3 opacity-0 transition-all group-hover:opacity-60" />
+                      <ArrowUpRight className="h-3 w-3 opacity-0 transition-colors duration-200 group-hover:opacity-60" />
                     </Link>
                   </li>
                 ))}
@@ -83,45 +79,35 @@ export function ShopifyFooter() {
             </div>
           ))}
 
-          {/* Language Selector */}
+          {/* Language */}
           <div>
-            <h3 className="text-xs font-bold uppercase tracking-wider text-white">
-              Language / 语言
+            <h3 className="text-xs font-medium text-white">
+              {t("nav.language")}
             </h3>
             <div className="mt-4 flex flex-wrap gap-2">
               {(Object.keys(localeLabels) as Locale[]).map((loc) => (
                 <button
                   key={loc}
                   onClick={() => setLocale(loc)}
-                  className={cn(
-                    "inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold transition-all border rounded-none",
+                  className={cn("inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-medium transition-colors duration-200 border",
                     locale === loc
-                      ? "bg-white text-slate-900 border-white"
-                      : "bg-transparent text-slate-400 border-slate-800 hover:border-slate-600"
+                      ? "bg-white text-[#101828] border-white"
+                      : "bg-transparent text-[var(--footer-muted)] border-[var(--footer-border)] hover:border-white/30 hover:text-white"
                   )}
                 >
-                  <span>{localeFlags[loc]}</span>
                   {localeLabels[loc]}
                 </button>
               ))}
             </div>
           </div>
-
         </div>
 
-        {/* Bottom copyright info */}
-        <div className="mt-12 flex flex-col items-center justify-between gap-4 border-t border-slate-800 pt-8 sm:flex-row text-xs text-slate-500">
+        {/* Bottom bar */}
+        <div className="mt-12 flex flex-col items-center justify-between gap-4 border-t border-[var(--footer-border)] pt-8 sm:flex-row text-xs text-[var(--footer-muted)]">
           <p>
-            &copy; {new Date().getFullYear()} GlobalTrade Hub. All rights reserved.
+            &copy; {new Date().getFullYear()} GlobalTrade Hub. {t("footer.rights")}.
           </p>
-          <div className="flex items-center gap-4 font-mono">
-            <span className="inline-flex items-center gap-1.5">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-              ONLINE
-            </span>
-            <span className="text-slate-800">|</span>
-            <span>SECURED SSL</span>
-          </div>
+          <p className="manifest-line">{t("footer.facts")}</p>
         </div>
       </div>
     </footer>

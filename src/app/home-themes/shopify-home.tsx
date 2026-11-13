@@ -1,25 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { motion } from "framer-motion";
 import {
-  ArrowRight,
-  Star,
-  ChevronRight,
-  ShieldCheck,
-  CreditCard,
-  Lock,
-  Globe,
-  FileText,
-  Briefcase,
-  BookOpen,
-} from "lucide-react";
+  ArrowRight, Star, CaretRight, CreditCard, Lock,
+  Briefcase, FileText, Check, ArrowCounterClockwise, Truck, Package,
+} from "@phosphor-icons/react";
 import { useI18n } from "@/contexts/i18n-context";
 import { useCurrency } from "@/contexts/currency-context";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { Eye } from "@phosphor-icons/react";
+import { CountUp } from "@/components/motion";
+import { QuickView } from "@/components/quick-view";
+import { Reveal } from "@/components/reveal";
 
 interface Product {
   id: string;
@@ -32,36 +27,47 @@ interface Product {
   price: string;
   type: string;
   image_key: string | null;
+  rating?: number;
+  review_count?: number;
+  sold_count?: number;
+  stock?: number;
+  vendor?: string;
+  compare_at_price?: string | null;
 }
 
-// 评分和评论数模拟（对齐真实在架商品）
-const PRODUCT_REVIEW_META: Record<string, { rating: number; reviews: number; badge?: string }> = {
-  "prod-1": { rating: 5.0, reviews: 38, badge: "Hot Service" },
-  "prod-2": { rating: 4.8, reviews: 14 },
-  "prod-3": { rating: 4.9, reviews: 22, badge: "Recommended" },
-  "prod-9": { rating: 4.8, reviews: 96, badge: "Best Seller" },
-  "prod-10": { rating: 4.7, reviews: 45 },
-  "prod-12": { rating: 4.9, reviews: 67, badge: "Masterclass" },
-};
+/** 提单号：由商品 id 派生，稳定且看起来像真实单据 */
+function manifestRef(id: string) {
+  const n = id.replace(/\D/g, "").padStart(4, "0");
+  return `GT-${n}-26`;
+}
 
 export function ShopifyHome() {
   const { t, locale } = useI18n();
   const { format: formatPrice } = useCurrency();
   const [featured, setFeatured] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
+  const [catalogTotal, setCatalogTotal] = useState(0);
+  const [quickId, setQuickId] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    fetch("/api/products?limit=4")
-      .then((r) => r.json())
-      .then((j) => {
-        if (cancelled) return;
-        setFeatured((j.data || []).slice(0, 4));
+  const loadFeatured = useCallback(() => {
+    setLoading(true);
+    setFailed(false);
+    fetch("/api/products?limit=8&sort=featured")
+      .then((r) => {
+        if (!r.ok) throw new Error(String(r.status));
+        return r.json();
       })
-      .catch(() => {})
-      .finally(() => !cancelled && setLoading(false));
-    return () => { cancelled = true; };
+      .then((j) => {
+        if (j.error) throw new Error(j.error);
+        setFeatured((j.data || []).slice(0, 8));
+        setCatalogTotal(Number(j.total ?? (j.data || []).length));
+      })
+      .catch(() => setFailed(true))
+      .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => { loadFeatured(); }, [loadFeatured]);
 
   function localized(p: Product, field: "title" | "description"): string {
     const rec = p as unknown as Record<string, string | null>;
@@ -69,359 +75,420 @@ export function ShopifyHome() {
     return rec[`${field}_${locale}`] || rec[`${field}_en`] || rec[field] || "";
   }
 
+  const physical = featured.filter((p) => p.type === "physical").slice(0, 3);
+  const gridItems = featured.slice(0, 6);
+
   return (
-    <div className="bg-slate-50/30 min-h-screen text-[#0f172a] selection:bg-slate-200">
-      {/* ══════════════════════════════════════════════
-          HERO — Split Layout with Editorial Image & Banner
-         ══════════════════════════════════════════════ */}
-      <section className="relative mx-auto max-w-7xl px-4 pt-8 pb-16 sm:px-6 lg:px-8">
-        <div className="grid lg:grid-cols-12 gap-8 items-center">
-          {/* Left Hero Box: Editorial Layout */}
-          <div className="lg:col-span-7 flex flex-col justify-center pr-0 lg:pr-8">
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 mb-6 w-fit shadow-sm"
-            >
-              <span className="relative flex h-2 w-2">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-slate-400 opacity-60" />
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-slate-700" />
-              </span>
-              <span className="font-mono text-[10px] tracking-[0.18em] text-slate-600 font-bold uppercase">
-                Global Commerce · Consulting · Digital Assets
-              </span>
-            </motion.div>
+    <div className="bg-background text-foreground">
+      {/* ══════════ HERO — port scene, headline on calm sky ══════════ */}
+      <section className="relative isolate overflow-hidden border-b border-border">
+        <Image
+          src="/images/catalog/cargo-ship-3.jpg"
+          alt={t("home.hero.scene_alt")}
+          fill
+          priority
+          sizes="100vw"
+          className="object-cover object-center"
+        />
+        {/* 单色压暗，保证文字对比；不引入色相渐变 */}
+        <div className="absolute inset-0 bg-[#0b0e12]/62" aria-hidden="true" />
+        <div className="absolute inset-x-0 top-0 h-2/3 bg-[#0b0e12]/35" aria-hidden="true" />
 
-            <motion.h1
-              initial={{ opacity: 0, y: 15 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1 }}
-              className="font-serif text-4xl sm:text-5xl lg:text-[54px] font-semibold tracking-tight leading-[1.1] text-slate-900"
-            >
+        <div className="relative mx-auto flex min-h-[640px] max-w-7xl flex-col px-4 pt-16 sm:px-6 lg:min-h-[720px] lg:px-8">
+          <div className="max-w-2xl">
+            <p className="manifest-line text-white/70">{t("home.hero.route")}</p>
+            <h1 className="mt-4 text-balance text-4xl leading-[1.1] text-white sm:text-5xl lg:text-[52px]">
               {t("home.hero.title")}
-              <br />
-              <span className="text-slate-500 italic font-normal">{t("home.hero.highlight")}</span>
-            </motion.h1>
-
-            <motion.p
-              initial={{ opacity: 0, y: 15 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2 }}
-              className="mt-6 max-w-xl text-slate-500 text-[15px] sm:text-[16px] leading-relaxed"
-            >
+              {t("home.hero.highlight")}
+            </h1>
+            <p className="mt-6 max-w-xl text-pretty text-[15px] leading-relaxed text-white/80">
               {t("home.hero.subtitle")}
-            </motion.p>
-
-            <motion.div
-              initial={{ opacity: 0, y: 15 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3 }}
-              className="mt-8 flex flex-wrap gap-4"
-            >
-              <Button asChild size="lg" className="h-12 px-8 bg-slate-900 text-white hover:bg-slate-800 rounded-none tracking-wider uppercase text-xs font-bold transition-all shadow-md btn-shopify">
+            </p>
+            <div className="mt-8 flex flex-wrap gap-3">
+              <Button asChild size="lg" className="bg-white text-[#14181d] hover:bg-white/90">
                 <Link href="/products">
                   {t("home.hero.cta.primary")}
-                  <ArrowRight className="ml-2 h-4 w-4" />
+                  <ArrowRight className="ml-1 h-4 w-4" />
                 </Link>
               </Button>
-              <Button asChild size="lg" variant="outline" className="h-12 px-8 border-slate-300 hover:bg-slate-50 rounded-none tracking-wider uppercase text-xs font-bold transition-all bg-white text-slate-800">
-                <Link href="/consulting">
-                  {t("home.hero.cta.secondary")}
-                </Link>
+              <Button
+                asChild
+                size="lg"
+                variant="outline"
+                className="border-white/35 bg-transparent text-white hover:bg-white/10 hover:text-white"
+              >
+                <Link href="/consulting">{t("home.hero.cta.secondary")}</Link>
               </Button>
-            </motion.div>
-
-            {/* Trust Badges */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.4 }}
-              className="mt-10 pt-6 border-t border-slate-200/80 flex flex-wrap gap-6 text-xs text-slate-500 font-medium"
-            >
-              <span className="inline-flex items-center gap-1.5">
-                <Lock className="h-3.5 w-3.5 text-slate-700" />
-                {t("home.trust.ssl")}
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <CreditCard className="h-3.5 w-3.5 text-slate-700" />
-                {t("home.trust.payment")}
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <ShieldCheck className="h-3.5 w-3.5 text-slate-700" />
-                {t("home.trust.buyer_protection")}
-              </span>
-            </motion.div>
+            </div>
           </div>
 
-          {/* Right Hero Box: Editorial Promo Banner Card */}
-          <div className="lg:col-span-5 flex justify-center w-full">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.98 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.6 }}
-              className="w-full max-w-sm overflow-hidden border border-slate-200 bg-white shadow-sm hover:shadow-md transition-shadow duration-300"
-            >
-              {/* Graphic Banner Area */}
-              <div className="relative aspect-[4/3] bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center p-8 overflow-hidden group">
-                <div className="absolute inset-0 bg-slate-900/5 group-hover:bg-slate-900/10 transition-colors z-10" />
-                
-                {/* Abstract Corporate Graphics */}
-                <div className="relative z-20 flex flex-col items-center text-center">
-                  <div className="flex h-16 w-16 items-center justify-center rounded-full bg-white shadow-md mb-4 text-slate-800">
-                    <Globe className="h-8 w-8 stroke-1" />
-                  </div>
-                  <span className="text-[10px] font-mono tracking-[0.2em] text-slate-500 uppercase font-bold">Featured consulting</span>
-                  <h3 className="mt-1.5 font-serif text-2xl font-semibold leading-tight text-slate-900">
-                    {t("home.featured_consulting.title")}
-                  </h3>
-                  <span className="mt-2 text-xs font-mono font-bold text-slate-600 bg-slate-200/50 px-2 py-0.5">
-                    {t("home.featured_consulting.session")}
-                  </span>
+          {/* 产品预览：真实在架货品与运费事实，从底边升起 */}
+          <div className="mt-auto pb-10 pt-16">
+            <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-pop">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-6 py-4">
+                <div className="flex items-center gap-3">
+                  <Truck className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-[13px] font-medium">{t("home.preview.title")}</span>
                 </div>
+                <span className="manifest-line">{t("home.preview.updated")}</span>
               </div>
 
-              {/* Service details */}
-              <div className="p-6">
-                <p className="text-xs leading-relaxed text-slate-500">
-                  {t("home.featured_consulting.desc")}
-                </p>
-
-                <div className="mt-5 space-y-2.5 text-xs text-slate-700 font-medium">
-                  <div className="flex items-center gap-2">
-                    <span className="text-slate-800">✓</span> {t("home.featured_consulting.feat1")}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-slate-800">✓</span> {t("home.featured_consulting.feat2")}
-                  </div>
-                </div>
-
-                <Link href="/consulting" className="mt-6 block w-full text-center text-xs font-bold uppercase tracking-wider py-3.5 bg-slate-900 text-white hover:bg-slate-800 transition-colors btn-shopify">
-                  {t("home.featured_consulting.btn")}
-                </Link>
-              </div>
-            </motion.div>
-          </div>
-        </div>
-      </section>
-
-      {/* ══════════════════════════════════════════════
-          CURATED COLLECTIONS
-         ══════════════════════════════════════════════ */}
-      <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8 border-t border-slate-200/60">
-        <div className="mb-10 text-center">
-          <h2 className="font-serif text-2xl sm:text-3xl font-semibold text-slate-900">
-            {t("home.cat.title")}
-          </h2>
-          <p className="mt-2 text-xs sm:text-sm text-slate-500 uppercase tracking-widest">{t("home.cat.subtitle")}</p>
-        </div>
-
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-          {/* Business Consulting */}
-          <Link
-            href="/products?type=service"
-            className="group relative cursor-pointer overflow-hidden border border-slate-200 bg-white p-6 transition-all hover:shadow-md flex flex-col justify-between min-h-[180px]"
-          >
-            <div className="flex justify-between items-start">
-              <div>
-                <span className="text-[10px] font-mono tracking-wider text-slate-400 font-bold uppercase">{t("home.collections.collection")}</span>
-                <h3 className="font-serif text-xl font-semibold text-slate-900 mt-1">
-                  {t("home.collections.consulting.title")}
-                </h3>
-                <p className="mt-2 text-xs text-slate-500 line-clamp-2">
-                  {t("home.collections.consulting.desc")}
-                </p>
-              </div>
-              <Briefcase className="h-6 w-6 text-slate-400 stroke-1" />
-            </div>
-            <div className="mt-4 flex items-center justify-between text-xs font-bold uppercase tracking-wider text-slate-900">
-              <span>{t("home.collections.consulting.btn")}</span>
-              <span className="transition-transform group-hover:translate-x-1">→</span>
-            </div>
-          </Link>
-
-          {/* Digital Templates */}
-          <Link
-            href="/products?type=virtual"
-            className="group relative cursor-pointer overflow-hidden border border-slate-200 bg-white p-6 transition-all hover:shadow-md flex flex-col justify-between min-h-[180px]"
-          >
-            <div className="flex justify-between items-start">
-              <div>
-                <span className="text-[10px] font-mono tracking-wider text-slate-400 font-bold uppercase">{t("home.collections.collection")}</span>
-                <h3 className="font-serif text-xl font-semibold text-slate-900 mt-1">
-                  {t("home.collections.templates.title")}
-                </h3>
-                <p className="mt-2 text-xs text-slate-500 line-clamp-2">
-                  {t("home.collections.templates.desc")}
-                </p>
-              </div>
-              <FileText className="h-6 w-6 text-slate-400 stroke-1" />
-            </div>
-            <div className="mt-4 flex items-center justify-between text-xs font-bold uppercase tracking-wider text-slate-900">
-              <span>{t("home.collections.templates.btn")}</span>
-              <span className="transition-transform group-hover:translate-x-1">→</span>
-            </div>
-          </Link>
-
-          {/* Online Courses */}
-          <Link
-            href="/products?type=virtual"
-            className="group relative cursor-pointer overflow-hidden border border-slate-200 bg-white p-6 transition-all hover:shadow-md flex flex-col justify-between min-h-[180px]"
-          >
-            <div className="flex justify-between items-start">
-              <div>
-                <span className="text-[10px] font-mono tracking-wider text-slate-400 font-bold uppercase">{t("home.collections.collection")}</span>
-                <h3 className="font-serif text-xl font-semibold text-slate-900 mt-1">
-                  {t("home.collections.courses.title")}
-                </h3>
-                <p className="mt-2 text-xs text-slate-500 line-clamp-2">
-                  {t("home.collections.courses.desc")}
-                </p>
-              </div>
-              <BookOpen className="h-6 w-6 text-slate-400 stroke-1" />
-            </div>
-            <div className="mt-4 flex items-center justify-between text-xs font-bold uppercase tracking-wider text-slate-900">
-              <span>{t("home.collections.courses.btn")}</span>
-              <span className="transition-transform group-hover:translate-x-1">→</span>
-            </div>
-          </Link>
-        </div>
-      </section>
-
-      {/* ══════════════════════════════════════════════
-          FEATURED ARRIVALS — Real Platform Data
-         ══════════════════════════════════════════════ */}
-      <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8 border-t border-slate-200/60">
-        <div className="mb-12 text-center">
-          <h2 className="font-serif text-2xl sm:text-3xl font-semibold text-slate-900">
-            {t("home.featured.title")}
-          </h2>
-          <p className="mt-2 text-xs sm:text-sm text-slate-500 uppercase tracking-widest">{t("home.featured.subtitle")}</p>
-        </div>
-
-        {loading ? (
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-            {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="border border-slate-200 bg-white rounded-none p-4 space-y-4 animate-pulse">
-                <div className="aspect-square bg-slate-100" />
-                <div className="h-4 w-3/4 bg-slate-100 mx-auto" />
-                <div className="h-3 w-1/2 bg-slate-100 mx-auto" />
-              </div>
-            ))}
-          </div>
-        ) : featured.length === 0 ? (
-          <p className="py-12 text-center text-sm text-slate-500">{t("home.featured.empty")}</p>
-        ) : (
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-            {featured.map((product) => {
-              const meta = PRODUCT_REVIEW_META[product.id] || { rating: 5.0, reviews: 12 };
-              return (
-                <div
-                  key={product.id}
-                  className="group relative overflow-hidden bg-white border border-slate-200 transition-all duration-300 hover:shadow-md flex flex-col justify-between"
-                >
-                  {/* Thumbnail area */}
-                  <div className="relative aspect-square w-full overflow-hidden bg-slate-50">
-                    <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-slate-100/60 to-slate-200/60">
-                      <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white shadow-sm text-slate-800">
-                        {product.type === "service" ? (
-                          <Briefcase className="h-6 w-6 stroke-1" />
-                        ) : (
-                          <FileText className="h-6 w-6 stroke-1" />
-                        )}
+              {loading ? (
+                <div className="divide-y divide-border-subtle">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="flex items-center gap-4 px-6 py-4">
+                      <div className="h-12 w-12 shrink-0 animate-pulse rounded-md bg-muted" />
+                      <div className="flex-1 space-y-2">
+                        <div className="h-3 w-40 animate-pulse rounded bg-muted" />
+                        <div className="h-3 w-24 animate-pulse rounded bg-muted" />
                       </div>
                     </div>
-                    
-                    {/* Badge */}
-                    {meta.badge && (
-                      <span className="absolute top-3 left-3 bg-slate-900 text-white text-[9px] font-semibold tracking-wider uppercase px-2 py-0.5">
-                        {meta.badge}
-                      </span>
-                    )}
-
-                    {/* Quick view link */}
-                    <div className="absolute inset-x-3 bottom-3 translate-y-8 opacity-0 transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100 z-20">
-                      <Link
-                        href={`/products/${product.id}`}
-                        className="w-full bg-white text-slate-900 border border-slate-950 hover:bg-slate-900 hover:text-white text-[11px] font-bold py-2.5 tracking-wider uppercase transition-colors flex items-center justify-center gap-1.5 shadow-sm btn-shopify"
-                      >
-                        View Details
-                      </Link>
-                    </div>
-                  </div>
-
-                  {/* Info area */}
-                  <div className="p-4 flex flex-col items-center text-center">
-                    {/* Ratings */}
-                    <div className="flex items-center gap-1 mb-1.5">
-                      {Array.from({ length: 5 }).map((_, i) => (
-                        <Star
-                          key={i}
-                          className={cn(
-                            "h-3 w-3",
-                            i < Math.floor(meta.rating) ? "fill-slate-900 text-slate-900" : "text-slate-200"
-                          )}
-                        />
-                      ))}
-                      <span className="text-[10px] text-slate-400 ml-1">({meta.reviews})</span>
-                    </div>
-
-                    {/* Title */}
-                    <h3 className="font-serif text-[15px] font-semibold text-slate-900 hover:text-slate-500 transition-colors line-clamp-1">
-                      <Link href={`/products/${product.id}`}>{localized(product, "title")}</Link>
-                    </h3>
-                    
-                    {/* Desc */}
-                    <p className="mt-1 text-xs text-slate-500 line-clamp-1">
-                      {localized(product, "description")}
-                    </p>
-
-                    {/* Price */}
-                    <div className="mt-3 flex items-center justify-center gap-2">
-                      <span className="text-sm font-bold text-slate-900 font-mono">
-                        {formatPrice(parseFloat(product.price))}
-                      </span>
-                    </div>
-                  </div>
+                  ))}
                 </div>
-              );
-            })}
+              ) : physical.length > 0 ? (
+                <div className="divide-y divide-border-subtle">
+                  {physical.map((p) => (
+                    <Link
+                      key={p.id}
+                      href={`/products/${p.id}`}
+                      className="flex items-center gap-4 px-6 py-4 transition-colors hover:bg-muted"
+                    >
+                      <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-md border border-border bg-muted">
+                        {p.image_key && (
+                          <Image src={p.image_key} alt={localized(p, "title")} fill sizes="48px" className="object-cover" />
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[13.5px] font-medium">{localized(p, "title")}</p>
+                        <p className="manifest-line mt-1">
+                          {manifestRef(p.id)} · {p.vendor || "GlobalTrade"} · {t("home.preview.in_stock")} {p.stock ?? 0}
+                        </p>
+                      </div>
+                      <div className="hidden shrink-0 text-right sm:block">
+                        <p className="text-[13px] font-medium tabular-nums">{formatPrice(Number(p.price))}</p>
+                        <p className="manifest-line mt-1">{t("home.preview.free_over")} $300</p>
+                      </div>
+                      <CaretRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    </Link>
+                  ))}
+                </div>
+              ) : (
+                <div className="px-6 py-8 text-center text-[13px] text-muted-foreground">
+                  {t("home.featured.empty")}
+                </div>
+              )}
+            </div>
           </div>
-        )}
+        </div>
+      </section>
 
-        <div className="mt-12 text-center">
-          <Button asChild size="lg" variant="outline" className="h-11 px-8 rounded-none border-slate-300 text-slate-800 hover:bg-slate-50 tracking-wider uppercase text-xs font-bold bg-white shadow-sm">
-            <Link href="/products" className="inline-flex items-center gap-2">
-              {t("home.featured.view_all")} <ChevronRight className="h-4 w-4" />
+      {/* ══════════ Shipping facts — the product's own numbers ══════════ */}
+      <section className="border-b border-border bg-card">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <dl className="grid grid-cols-2 divide-border-subtle sm:grid-cols-4 sm:divide-x">
+            {[
+              { label: t("home.facts.zones"), value: "4", note: t("home.facts.zones_note") },
+              { label: t("home.facts.catalog"), value: catalogTotal ? String(catalogTotal) : "—", note: t("home.facts.catalog_note") },
+              { label: t("home.facts.dispatch"), value: "48h", note: t("home.facts.dispatch_note") },
+              { label: t("home.facts.refund"), value: "7", note: t("home.facts.refund_note") },
+            ].map((f) => (
+              <div key={f.label} className="px-0 py-8 sm:px-8 sm:first:pl-0 sm:last:pr-0">
+                <dt className="text-[13px] text-muted-foreground">{f.label}</dt>
+                <dd className="mt-2 text-3xl tabular-nums">
+                  {/^\d+$/.test(f.value) ? <CountUp value={Number(f.value)} /> : f.value}
+                </dd>
+                <p className="mt-2 text-[12px] leading-relaxed text-muted-foreground">{f.note}</p>
+              </div>
+            ))}
+          </dl>
+        </div>
+      </section>
+
+      {/* ══════════ What we sell — asymmetric, not three equal cards ══════════ */}
+      <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
+        <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
+          <div className="max-w-xl">
+            <h2 className="text-2xl sm:text-[28px]">{t("home.cat.title")}</h2>
+            <p className="mt-2 text-[14px] leading-relaxed text-muted-foreground">{t("home.cat.subtitle")}</p>
+          </div>
+          <Button asChild variant="outline" size="sm">
+            <Link href="/products">
+              {t("home.featured.view_all")}
+              <CaretRight className="ml-1 h-4 w-4" />
             </Link>
           </Button>
         </div>
+
+        <div className="grid gap-4 lg:grid-cols-12">
+          {/* Wide: physical goods, the thing that actually ships */}
+          <Link
+            href="/products?type=physical"
+            className="group relative overflow-hidden rounded-2xl border border-border bg-card transition-colors hover:bg-muted lg:col-span-7"
+          >
+            <div className="relative aspect-[16/10] overflow-hidden sm:aspect-[16/9]">
+              <Image
+                src="/images/catalog/warehouse-logistics-2.jpg"
+                alt={t("home.collections.physical_alt")}
+                fill
+                sizes="(min-width: 1024px) 58vw, 100vw"
+                className="object-cover"
+              />
+            </div>
+            <div className="flex items-start justify-between gap-4 p-6">
+              <div>
+                <h3 className="text-lg">{t("home.collections.physical")}</h3>
+                <p className="mt-2 max-w-md text-[13px] leading-relaxed text-muted-foreground">
+                  {t("home.collections.physical_desc")}
+                </p>
+                <p className="manifest-line mt-3">{t("home.collections.physical_meta")}</p>
+              </div>
+              <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-muted-foreground" />
+            </div>
+          </Link>
+
+          {/* Narrow column: two compact entries */}
+          <div className="grid gap-4 lg:col-span-5">
+            {[
+              { href: "/products?type=service", Icon: Briefcase, title: t("home.collections.consulting.title"), desc: t("home.collections.consulting.desc"), meta: t("home.collections.consulting_meta") },
+              { href: "/products?type=virtual", Icon: FileText, title: t("home.collections.templates.title"), desc: t("home.collections.templates.desc"), meta: t("home.collections.templates_meta") },
+            ].map(({ href, Icon, title, desc, meta }) => (
+              <Link
+                key={title}
+                href={href}
+                className="group flex flex-col justify-between rounded-2xl border border-border bg-card p-6 transition-colors hover:bg-muted"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Icon className="h-4 w-4 text-muted-foreground" />
+                      <h3 className="text-[15px]">{title}</h3>
+                    </div>
+                    <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground line-clamp-2">{desc}</p>
+                  </div>
+                  <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-muted-foreground" />
+                </div>
+                <p className="manifest-line mt-4">{meta}</p>
+              </Link>
+            ))}
+          </div>
+        </div>
       </section>
 
-      {/* ══════════════════════════════════════════════
-          CTA SECTION
-         ══════════════════════════════════════════════ */}
-      <section className="relative mx-auto max-w-7xl px-4 pb-20 sm:px-6 lg:px-8 border-t border-slate-200/60 pt-16">
-        <div className="relative overflow-hidden bg-slate-900 p-12 sm:p-16 text-white text-center max-w-4xl mx-auto rounded-none">
-          <div className="relative max-w-2xl mx-auto z-10">
-            <h2 className="font-serif text-3xl sm:text-4xl font-semibold mb-6">
-              {t("home.cta.title")}
-            </h2>
-            <p className="text-slate-400 mb-8 max-w-lg mx-auto text-xs sm:text-sm">
-              {t("home.cta.subtitle")}
-            </p>
-            <div className="flex flex-wrap justify-center gap-4">
-              <Button asChild size="lg" className="h-12 px-8 bg-white text-slate-900 hover:bg-slate-100 rounded-none tracking-wider uppercase text-xs font-bold transition-all shadow-md">
-                <Link href="/auth/register">
-                  {t("nav.register")}
-                  <ArrowRight className="ml-2 h-4 w-4" />
-                </Link>
-              </Button>
-              <Button asChild size="lg" variant="outline" className="h-12 px-8 border-slate-700 bg-transparent text-white hover:bg-slate-800 rounded-none tracking-wider uppercase text-xs font-bold transition-all">
-                <a href="mailto:support@globaltrade-hub.com">
-                  {t("footer.contact")}
-                </a>
+      {/* ══════════ Catalogue — real photos carry the colour ══════════ */}
+      <section className="border-t border-border bg-card">
+        <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
+          <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <h2 className="text-2xl sm:text-[28px]">{t("home.featured.title")}</h2>
+              <p className="mt-2 text-[14px] text-muted-foreground">{t("home.featured.subtitle")}</p>
+            </div>
+            <Link href="/products" className="text-[13px] font-medium text-primary hover:underline">
+              {t("home.featured.view_all")}
+            </Link>
+          </div>
+
+          {loading ? (
+            <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
+              {[1, 2, 3, 4, 5, 6].map((i) => (
+                <div key={i} className="space-y-3">
+                  <div className="aspect-[4/3] animate-pulse rounded-xl bg-muted" />
+                  <div className="h-3 w-3/4 animate-pulse rounded bg-muted" />
+                  <div className="h-3 w-1/2 animate-pulse rounded bg-muted" />
+                </div>
+              ))}
+            </div>
+          ) : failed ? (
+            <div className="rounded-2xl border border-border py-14 text-center">
+              <p className="text-[13px] text-muted-foreground">{t("home.featured.load_failed")}</p>
+              <Button variant="outline" size="sm" className="mt-4" onClick={loadFeatured}>
+                <ArrowCounterClockwise className="h-4 w-4" />
+                {t("common.retry")}
               </Button>
             </div>
+          ) : gridItems.length === 0 ? (
+            <p className="py-12 text-center text-[13px] text-muted-foreground">{t("home.featured.empty")}</p>
+          ) : (
+            <Reveal className="grid grid-cols-2 gap-x-4 gap-y-8 lg:grid-cols-3">
+              {gridItems.map((product) => {
+                const rating = product.rating ?? 4.8;
+                const compareAt = product.compare_at_price ? Number(product.compare_at_price) : 0;
+                const price = Number(product.price);
+                return (
+                  <article key={product.id} className="group relative">
+                    <Link href={`/products/${product.id}`} className="absolute inset-0 z-10" aria-label={localized(product, "title")} />
+                    <div className="relative aspect-[4/3] overflow-hidden rounded-xl border border-border bg-muted">
+                      {product.image_key ? (
+                        <Image
+                          src={product.image_key}
+                          alt={localized(product, "title")}
+                          fill
+                          sizes="(min-width: 1024px) 30vw, 50vw"
+                          className="object-cover"
+                        />
+                      ) : (
+                        <div className="absolute inset-0 flex items-center justify-center text-muted-foreground">
+                          <Package className="h-6 w-6" />
+                        </div>
+                      )}
+                      <button
+                        onClick={() => setQuickId(product.id)}
+                        aria-label={t("quick.view")}
+                        className="absolute right-2 top-2 z-20 flex h-9 w-9 items-center justify-center rounded-md border border-border bg-card/95 text-muted-foreground opacity-0 shadow-card transition-[opacity,color] duration-200 hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </button>
+                    </div>
+                    <div className="mt-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <h3 className="text-[14px] leading-snug transition-colors group-hover:text-primary line-clamp-2">
+                          {localized(product, "title")}
+                        </h3>
+                        <span className="shrink-0 text-[14px] tabular-nums">{formatPrice(price)}</span>
+                      </div>
+                      <p className="manifest-line mt-2 flex flex-wrap items-center gap-x-2">
+                        <span>{manifestRef(product.id)}</span>
+                        <span aria-hidden="true">·</span>
+                        <span className="inline-flex items-center gap-1">
+                          <Star className="h-3 w-3" weight="fill" />
+                          {rating.toFixed(1)}
+                        </span>
+                        {compareAt > price && (
+                          <>
+                            <span aria-hidden="true">·</span>
+                            <span className="line-through">{formatPrice(compareAt)}</span>
+                          </>
+                        )}
+                      </p>
+                    </div>
+                  </article>
+                );
+              })}
+            </Reveal>
+          )}
+        </div>
+      </section>
+
+      {/* ══════════ How fulfilment works — facts, not decoration ══════════ */}
+      <section className="border-t border-border">
+        <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
+          <div className="grid gap-10 lg:grid-cols-12 lg:gap-16">
+            <div className="lg:col-span-5">
+              <h2 className="text-2xl sm:text-[28px]">{t("home.fulfilment.title")}</h2>
+              <p className="mt-4 text-[14px] leading-relaxed text-muted-foreground">
+                {t("home.fulfilment.desc")}
+              </p>
+              <div className="mt-6 flex items-center gap-4 border-t border-border pt-6 text-[13px] text-muted-foreground">
+                <span className="inline-flex items-center gap-2">
+                  <Lock className="h-4 w-4" />
+                  {t("home.trust.ssl")}
+                </span>
+                <span className="inline-flex items-center gap-2">
+                  <CreditCard className="h-4 w-4" />
+                  {t("home.trust.payment")}
+                </span>
+              </div>
+              <Button asChild variant="outline" className="mt-6">
+                <Link href="/products?type=physical">
+                  {t("home.fulfilment.cta")}
+                  <ArrowRight className="ml-1 h-4 w-4" />
+                </Link>
+              </Button>
+            </div>
+
+            {/* Zone table: one accent on the row that matters */}
+            <div className="lg:col-span-7">
+              <div className="overflow-hidden rounded-2xl border border-border bg-card">
+                <table className="w-full text-[13px]">
+                  <thead>
+                    <tr className="border-b border-border">
+                      <th className="px-6 py-3 text-left font-medium text-muted-foreground">{t("home.fulfilment.zone")}</th>
+                      <th className="px-6 py-3 text-right font-medium text-muted-foreground">{t("home.fulfilment.rate")}</th>
+                      <th className="px-6 py-3 text-right font-medium text-muted-foreground">{t("home.fulfilment.free")}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border-subtle">
+                    {[
+                      { name: t("home.fulfilment.apac"), rate: "$18.00", free: "$300.00", lead: true },
+                      { name: t("home.fulfilment.na"), rate: "$28.00", free: "$450.00" },
+                      { name: t("home.fulfilment.eu"), rate: "$32.00", free: "$500.00" },
+                      { name: t("home.fulfilment.latam"), rate: "$36.00", free: "$600.00" },
+                    ].map((z) => (
+                      <tr key={z.name} className={cn(z.lead && "bg-primary-soft")}>
+                        <td className="px-6 py-4">
+                          <span className={cn("font-medium", z.lead && "text-primary")}>{z.name}</span>
+                          {z.lead && <span className="manifest-line ml-2">{t("home.fulfilment.fastest")}</span>}
+                        </td>
+                        <td className="px-6 py-4 text-right tabular-nums">{z.rate}</td>
+                        <td className="px-6 py-4 text-right tabular-nums text-muted-foreground">{z.free}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="manifest-line mt-3">{t("home.fulfilment.note")}</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ══════════ Advisory — one concrete offer ══════════ */}
+      <section className="border-t border-border bg-card">
+        <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
+          <div className="grid items-center gap-10 lg:grid-cols-12 lg:gap-16">
+            <div className="lg:col-span-6">
+              <div className="relative aspect-[4/3] overflow-hidden rounded-2xl border border-border">
+                <Image
+                  src="/images/catalog/business-meeting-1.jpg"
+                  alt={t("home.featured_consulting.title")}
+                  fill
+                  sizes="(min-width: 1024px) 46vw, 100vw"
+                  className="object-cover"
+                />
+              </div>
+            </div>
+            <div className="lg:col-span-6">
+              <p className="manifest-line">{t("home.featured_consulting.session")}</p>
+              <h2 className="mt-3 text-2xl sm:text-[28px]">{t("home.featured_consulting.title")}</h2>
+              <p className="mt-4 text-[14px] leading-relaxed text-muted-foreground">
+                {t("home.featured_consulting.desc")}
+              </p>
+              <ul className="mt-6 space-y-3 text-[13.5px]">
+                {[t("home.featured_consulting.feat1"), t("home.featured_consulting.feat2")].map((f) => (
+                  <li key={f} className="flex items-start gap-2">
+                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                    <span>{f}</span>
+                  </li>
+                ))}
+              </ul>
+              <div className="mt-8 flex flex-wrap items-center gap-4">
+                <Button asChild size="lg">
+                  <Link href="/consulting">{t("home.featured_consulting.btn")}</Link>
+                </Button>
+                <span className="text-[13px] text-muted-foreground">
+                  {t("home.advisory.from")} <span className="tabular-nums text-foreground">$299.00</span>
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <QuickView productId={quickId} open={!!quickId} onOpenChange={(v) => { if (!v) setQuickId(null); }} />
+
+      {/* ══════════ Contact strip ══════════ */}
+      <section className="border-t border-border">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-6 px-4 py-12 sm:px-6 lg:px-8">
+          <div className="max-w-lg">
+            <h2 className="text-xl">{t("home.cta.title")}</h2>
+            <p className="mt-2 text-[13.5px] leading-relaxed text-muted-foreground">{t("home.cta.subtitle")}</p>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <Button asChild>
+              <Link href="/contact">{t("footer.contact")}</Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href="/about">{t("footer.about")}</Link>
+            </Button>
           </div>
         </div>
       </section>

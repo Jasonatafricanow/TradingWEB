@@ -48,6 +48,11 @@ interface PaginatedResult {
 }
 
 export async function listAllOrders() {
+  const { IS_DEMO_MODE } = await import('@/config/constants');
+  if (IS_DEMO_MODE) {
+    const m = await import('@/lib/demo/commerce');
+    return { data: m.demoListOrders() as unknown as Record<string, unknown>[], error: null };
+  }
   try {
     const data = await db.select().from(orders).orderBy(desc(orders.created_at));
     return { data: data || [], error: null };
@@ -57,6 +62,19 @@ export async function listAllOrders() {
 }
 
 export async function listOrdersPaginated(params: PaginationParams = {}): Promise<PaginatedResult> {
+  const { IS_DEMO_MODE } = await import('@/config/constants');
+  if (IS_DEMO_MODE) {
+    const m = await import('@/lib/demo/commerce');
+    let rows = m.demoListOrders(undefined, params.status);
+    if (params.search) {
+      const q = params.search.toLowerCase();
+      rows = rows.filter((o) => o.order_no.toLowerCase().includes(q) || o.buyer_email.toLowerCase().includes(q) || o.buyer_name.toLowerCase().includes(q));
+    }
+    const limit = Math.max(1, params.limit || 20);
+    const page = Math.max(1, params.page || 1);
+    const total = rows.length;
+    return { data: rows.slice((page-1)*limit, page*limit) as unknown as Record<string, unknown>[], total, page, limit, total_pages: Math.max(1, Math.ceil(total/limit)) };
+  }
   const page = Math.max(1, params.page || 1);
   const limit = Math.min(100, Math.max(1, params.limit || 20));
   const offset = (page - 1) * limit;
@@ -121,6 +139,21 @@ export async function listOrdersPaginated(params: PaginationParams = {}): Promis
 
 /** 各 Saved View 的订单数,给列表页 Tab 角标用;并行执行,单视图失败降级为 0 */
 export async function getOrderViewCounts(): Promise<Record<string, number>> {
+  const { IS_DEMO_MODE } = await import('@/config/constants');
+  if (IS_DEMO_MODE) {
+    const m = await import('@/lib/demo/commerce');
+    const rows = m.demoListOrders();
+    const paid = rows.filter((o) => o.payment_status === 'paid');
+    return {
+      unpaid: rows.filter((o) => o.status === 'pending').length,
+      paid_unfulfilled: paid.filter((o) => o.status !== 'completed').length,
+      to_ship: paid.filter((o) => o.order_items.some((i) => i.delivery_method === 'shipping')).length,
+      processing: rows.filter((o) => o.status === 'processing').length,
+      refunding: rows.filter((o) => o.has_refund).length,
+      offline_pending: rows.filter((o) => !['paypal','stripe'].includes(o.payment_method) && o.payment_status !== 'paid').length,
+      pos: 0, today_delivery: 2, delivering: 3, delivered: 126, delivery_failed: 1,
+    };
+  }
   const entries: [string, string | null][] = [['all', null], ...Object.entries(ORDER_VIEWS)];
   const results = await Promise.all(
     entries.map(async ([view, condition]) => {
@@ -265,6 +298,33 @@ export async function getAdminOrderDetail(orderId: string) {
 }
 
 export async function updateAdminOrder(id: string, data: Record<string, unknown>) {
+  const { IS_DEMO_MODE } = await import('@/config/constants');
+  if (IS_DEMO_MODE) {
+    const m = await import('@/lib/demo/commerce');
+    const current = m.demoGetOrder(id);
+    if (!current) return null;
+    // 标记已付款走统一管道，保证时间线与钱包/统计一致
+    if (data.paymentStatus === 'paid' && current.payment_status !== 'paid') {
+      m.demoMarkOrderPaid(id);
+    }
+    const status = typeof data.status === 'string' ? data.status : undefined;
+    if (status && status !== current.status) {
+      const o = m.demoGetOrder(id)!;
+      o.status = status;
+      o.timeline.push({
+        id: `${o.id}-t${o.timeline.length + 1}`,
+        action: status,
+        description: `状态更新为 ${status}`,
+        created_at: new Date().toISOString(),
+      });
+    }
+    if (typeof data.paymentStatus === 'string' && data.paymentStatus !== 'paid') {
+      const o = m.demoGetOrder(id)!;
+      o.payment_status = data.paymentStatus;
+      o.financial_status = data.paymentStatus;
+    }
+    return m.demoGetOrder(id) as never;
+  }
   try {
     const [current] = await db.select().from(orders).where(eq(orders.id, id)).limit(1);
     if (!current) return null;

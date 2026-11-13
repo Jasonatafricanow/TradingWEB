@@ -81,19 +81,21 @@ function persistCart(items: CartItem[]) {
 }
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
-  // Lazy-init from localStorage
-  const [items, setItems] = useState<CartItem[]>(() => {
-    // First mount: try to restore
-    if (typeof window !== "undefined") {
-      return loadCart();
-    }
-    return [];
-  });
+  // 首帧统一渲染空车，挂载后再从 localStorage 恢复：
+  // 避免 SSR（无 storage）与 CSR（有 storage）首帧结构不一致导致 hydration 失败。
+  const [items, setItems] = useState<CartItem[]>([]);
+  const [hydrated, setHydrated] = useState(false);
 
-  // Persist to localStorage whenever items change
   useEffect(() => {
+    setItems(loadCart());
+    setHydrated(true);
+  }, []);
+
+  // 恢复完成后才持久化，避免用空车覆盖已存数据
+  useEffect(() => {
+    if (!hydrated) return;
     persistCart(items);
-  }, [items]);
+  }, [items, hydrated]);
 
   const addItem = useCallback((item: Omit<CartItem, "quantity">) => {
     setItems((prev) => {

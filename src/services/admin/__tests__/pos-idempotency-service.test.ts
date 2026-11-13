@@ -26,6 +26,9 @@ const { mockDb } = vi.hoisted(() => ({
   },
 }));
 
+// 测试环境没有 DB_HOST，会被判为演示模式；这里测的是数据库路径
+vi.mock("@/config/constants", () => ({ IS_DEMO_MODE: false }));
+
 vi.mock("@/lib/db", () => ({
   db: mockDb,
 }));

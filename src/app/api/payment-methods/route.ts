@@ -6,6 +6,11 @@ import { listPaymentMethods } from "@/services/admin/payment-method-service";
  * Checkout 页调用，用于渲染线下支付选项。
  */
 export async function GET() {
+  const { IS_DEMO_MODE } = await import('@/config/constants');
+  if (IS_DEMO_MODE) {
+    const { DEMO_PAYMENT_METHODS } = await import('@/lib/demo/commerce');
+    return NextResponse.json({ data: DEMO_PAYMENT_METHODS });
+  }
   try {
     const result = await listPaymentMethods({ enabled: true });
     return NextResponse.json(result);

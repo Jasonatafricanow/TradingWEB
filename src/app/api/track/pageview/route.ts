@@ -28,6 +28,8 @@ function anonymizeIp(value: string | null): string | undefined {
 }
 
 export async function POST(request: NextRequest) {
+  const { IS_DEMO_MODE } = await import("@/config/constants")
+  if (IS_DEMO_MODE) return NextResponse.json({ success: true, demo: true })
   try {
     const body = await request.json()
     const path = normalizePath(body.path)

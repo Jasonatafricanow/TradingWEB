@@ -20,17 +20,17 @@ import {
   Download,
   Envelope,
   WifiHigh,
-  Briefcase,
-  Stack,
   Truck,
   Star,
-  ArrowRight,
 } from "@phosphor-icons/react";
-import { toast } from "sonner";
-import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { BreadcrumbPublic } from "@/components/breadcrumb-public";
+import { ProductThumb } from "@/components/product-thumb";
 import { useTheme } from "@/contexts/theme-context";
+import { Eye } from "@phosphor-icons/react";
+import { QuickView } from "@/components/quick-view";
+import { WishlistButton } from "@/components/wishlist-button";
+import { useUI } from "@/contexts/ui-context";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -66,23 +66,7 @@ interface Product {
 
 // ─── Design config ────────────────────────────────────────────────────────────
 
-const TYPE_VISUAL: Record<string, { gradient: string; iconColor: string }> = {
-  service: {
-    gradient:
-      "radial-gradient(ellipse 90% 90% at 20% 15%, #dbeafe 0%, #eff6ff 55%, #f0f9ff 100%)",
-    iconColor: "#2563eb",
-  },
-  virtual: {
-    gradient:
-      "radial-gradient(ellipse 90% 90% at 20% 15%, #ede9fe 0%, #f5f3ff 55%, #fdf4ff 100%)",
-    iconColor: "#7c3aed",
-  },
-  physical: {
-    gradient:
-      "radial-gradient(ellipse 90% 90% at 20% 15%, #dcfce7 0%, #f0fdf4 55%, #f7fee7 100%)",
-    iconColor: "#16a34a",
-  },
-};
+
 
 const DELIVERY_META: Record<string, { icon: React.ReactNode; label: string }> = {
   online:   { icon: <WifiHigh className="h-3 w-3" />,  label: "product.online" },
@@ -96,6 +80,7 @@ const DELIVERY_META: Record<string, { icon: React.ReactNode; label: string }> = 
 function ProductCard({
   product,
   onAddToCart,
+  onQuickView,
   getTitle,
   getDesc,
   getCategoryName,
@@ -104,6 +89,7 @@ function ProductCard({
 }: {
   product: Product;
   onAddToCart: (p: Product) => void;
+  onQuickView: (id: string) => void;
   getTitle: (p: Product) => string;
   getDesc: (p: Product) => string;
   getCategoryName: (p: Product) => string;
@@ -111,9 +97,7 @@ function ProductCard({
   t: (k: string) => string;
 }) {
   const router = useRouter();
-  const visual = TYPE_VISUAL[product.type] ?? TYPE_VISUAL.service;
   const delivery = product.delivery_method ? DELIVERY_META[product.delivery_method] : null;
-  const Icon = product.type === "service" ? Briefcase : product.type === "physical" ? Truck : Stack;
 
   const { theme } = useTheme();
   if (theme === "shopify") {
@@ -122,22 +106,30 @@ function ProductCard({
 
     return (
       <div
-        className="group relative overflow-hidden bg-white border border-[#e2e8f0] rounded-none p-0 transition-all duration-300 shadow-sm hover:shadow-md hover:border-slate-400 flex flex-col justify-between cursor-pointer"
+        className="group relative overflow-hidden bg-card border border-border rounded-2xl p-0 transition-colors duration-200 ease-out shadow-card flex flex-col justify-between cursor-pointer"
         onClick={() => router.push(`/products/${product.id}`)}
       >
         {/* Visual area */}
-        <div className="relative aspect-square w-full overflow-hidden bg-slate-50 border-b border-slate-100 flex items-center justify-center">
-          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white shadow-sm text-slate-800">
-            <Icon className="h-6 w-6" />
-          </div>
+        <div className="relative aspect-square w-full overflow-hidden border-b border-border-subtle">
+          <ProductThumb type={product.type} image={product.image_key} alt={getTitle(product)} />
           {product.categories && (
-            <span className="absolute top-3 left-3 bg-slate-900 text-white text-[9px] font-bold tracking-widest uppercase px-2 py-0.5">
+            <span className="absolute top-3 left-3 rounded-md bg-primary text-primary-foreground text-[11px] font-medium px-3 py-1">
               {getCategoryName(product)}
             </span>
           )}
-          <div className="absolute inset-x-3 bottom-3 translate-y-8 opacity-0 transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100 z-20">
+          <div className="absolute right-3 top-3 z-20 flex gap-1.5 opacity-0 transition-opacity duration-200 focus-within:opacity-100 group-hover:opacity-100">
             <button
-              className="w-full bg-white text-slate-900 border border-slate-950 hover:bg-slate-900 hover:text-white text-xs font-bold py-2.5 tracking-wider uppercase transition-colors flex items-center justify-center gap-1.5 shadow-sm"
+              aria-label={t("quick.view")}
+              className="flex h-9 w-9 items-center justify-center rounded-md border border-border bg-card/95 text-muted-foreground shadow-card transition-colors hover:text-foreground"
+              onClick={(e) => { e.stopPropagation(); onQuickView(product.id); }}
+            >
+              <Eye className="h-4 w-4" />
+            </button>
+            <WishlistButton productId={product.id} />
+          </div>
+          <div className="absolute inset-x-3 bottom-3 translate-y-2 opacity-0 transition-[opacity,transform] duration-200 group-hover:translate-y-0 group-hover:opacity-100 z-20">
+            <button
+              className="w-full rounded-md bg-card/95 backdrop-blur-md text-foreground border border-border hover:bg-primary hover:text-primary-foreground text-xs font-medium py-2 transition-colors flex items-center justify-center gap-2 shadow-card"
               onClick={(e) => {
                 e.stopPropagation();
                 onAddToCart(product);
@@ -152,29 +144,28 @@ function ProductCard({
         {/* Info Area */}
         <div className="p-4 flex flex-col items-center text-center">
           {/* Ratings */}
-          <div className="flex items-center gap-1 mb-1.5">
+          <div className="flex items-center gap-1 mb-2">
             {Array.from({ length: 5 }).map((_, i) => (
               <Star
                 key={i}
-                className={cn(
-                  "h-3 w-3",
-                  i < Math.floor(ratingVal) ? "fill-slate-900 text-slate-900" : "text-slate-200"
+                className={cn("h-3 w-3",
+                  i < Math.floor(ratingVal) ? "text-amber-500" : "text-border"
                 )}
                 weight={i < Math.floor(ratingVal) ? "fill" : "regular"}
               />
             ))}
-            <span className="text-[10px] text-slate-400 ml-1">({reviewCnt})</span>
+            <span className="text-[11px] text-muted-foreground ml-1">({reviewCnt})</span>
           </div>
 
-          <h3 className="font-serif text-[15px] font-semibold text-slate-900 hover:text-slate-500 transition-colors line-clamp-1">
+          <h3 className="font-display text-[15px] font-medium text-foreground hover:text-muted-foreground transition-colors line-clamp-1">
             {getTitle(product)}
           </h3>
-          <p className="mt-1 text-xs text-slate-500 line-clamp-1">
+          <p className="mt-1 text-xs text-muted-foreground line-clamp-1">
             {getDesc(product)}
           </p>
 
           <div className="mt-3 flex items-center justify-center gap-2">
-            <span className="text-sm font-bold text-slate-900 font-mono">
+            <span className="text-sm font-medium text-foreground font-mono">
               {formatPrice(parseFloat(product.price))}
             </span>
           </div>
@@ -186,36 +177,15 @@ function ProductCard({
   // Original Card Fallback
   return (
     <div
-      className="group relative flex cursor-pointer flex-col rounded-2xl border border-gray-200 bg-white shadow-sm transition-all duration-200 hover:-translate-y-px hover:border-gray-300 hover:shadow-lg"
+      className="group relative flex cursor-pointer flex-col rounded-2xl border border-border bg-card shadow-card transition-colors duration-200 ease-out"
       onClick={() => router.push(`/products/${product.id}`)}
     >
       {/* Visual area */}
-      <div
-        className="relative flex h-[116px] items-center justify-center overflow-hidden rounded-t-2xl"
-        style={{ background: visual.gradient }}
-      >
-        {/* Dot grid texture */}
-        <div
-          className="absolute inset-0 opacity-25"
-          style={{
-            backgroundImage:
-              "radial-gradient(circle, #94a3b8 1px, transparent 1px)",
-            backgroundSize: "18px 18px",
-          }}
-        />
-        {/* Icon */}
-        <div
-          className="relative z-10 flex h-12 w-12 items-center justify-center rounded-xl border border-white/90 bg-white/80 backdrop-blur-sm"
-          style={{
-            color: visual.iconColor,
-            boxShadow: "0 2px 8px rgba(0,0,0,.08)",
-          }}
-        >
-          <Icon className="h-5 w-5" weight="duotone" />
-        </div>
+      <div className="relative h-[116px] overflow-hidden rounded-t-2xl">
+        <ProductThumb type={product.type} image={product.image_key} alt={getTitle(product)} />
         {/* Category pill */}
         {product.categories && (
-          <span className="absolute bottom-2.5 left-3 rounded-full border border-white/90 bg-white/75 px-2.5 py-0.5 text-[11px] font-medium text-gray-500 backdrop-blur-sm">
+          <span className="absolute bottom-2.5 left-3 rounded-md border border-border bg-card/80 px-3 py-1 text-[11px] font-medium text-muted-foreground backdrop-blur-sm">
             {getCategoryName(product)}
           </span>
         )}
@@ -223,15 +193,15 @@ function ProductCard({
 
       {/* Body */}
       <div className="flex flex-1 flex-col px-5 pt-4 pb-0">
-        <h3 className="line-clamp-2 text-[14.5px] font-semibold leading-snug text-gray-900 transition-colors group-hover:text-blue-600">
+        <h3 className="line-clamp-2 text-[14.5px] font-medium leading-snug text-foreground transition-colors group-hover:text-primary">
           {getTitle(product)}
         </h3>
-        <p className="mt-1.5 line-clamp-2 text-[13px] leading-relaxed text-gray-500">
+        <p className="mt-2 line-clamp-2 text-[13px] leading-relaxed text-muted-foreground">
           {getDesc(product)}
         </p>
 
         {/* Meta row */}
-        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-gray-400">
+        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-muted-foreground">
           {delivery && (
             <span className="flex items-center gap-1">
               {delivery.icon}
@@ -240,7 +210,7 @@ function ProductCard({
           )}
           {product.duration && (
             <>
-              <span className="h-3 w-px bg-gray-200" />
+              <span className="h-3 w-px bg-border" />
               <span className="flex items-center gap-1">
                 <Clock className="h-3 w-3" />
                 {product.duration}
@@ -252,24 +222,24 @@ function ProductCard({
 
       {/* Footer */}
       <div className="mt-4 px-5 pb-5">
-        <div className="mb-4 h-px bg-gray-100" />
+        <div className="mb-4 h-px bg-border-subtle" />
         <div className="flex items-center justify-between gap-3">
           <div>
             {(product as any).price_min && (product as any).price_max && (product as any).price_min !== (product as any).price_max ? (
-              <span className="text-[22px] font-bold tracking-tight text-gray-900">
+              <span className="text-[22px] font-medium text-foreground">
                 {formatPrice(parseFloat((product as any).price_min))} – {formatPrice(parseFloat((product as any).price_max))}
               </span>
             ) : (
-              <span className="text-[22px] font-bold tracking-tight text-gray-900">
+              <span className="text-[22px] font-medium text-foreground">
                 {formatPrice(parseFloat(product.price))}
               </span>
             )}
             {product.type === "service" && (
-              <span className="ml-1 text-xs text-gray-400">/ {t("product.per_session")}</span>
+              <span className="ml-1 text-xs text-muted-foreground">/ {t("product.per_session")}</span>
             )}
           </div>
           <button
-            className="flex items-center gap-1.5 rounded-xl bg-gradient-to-br from-blue-600 to-blue-700 px-3.5 py-2 text-[13px] font-semibold text-white shadow-md shadow-blue-500/30 transition-all duration-150 hover:shadow-lg hover:shadow-blue-500/40 hover:opacity-95 active:scale-95"
+            className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-[13px] font-medium text-primary-foreground shadow-card transition-colors duration-200 ease-out hover:bg-primary-deep active:scale-95"
             onClick={(e) => {
               e.stopPropagation();
               onAddToCart(product);
@@ -289,17 +259,16 @@ function ProductCard({
 
 function ProductSkeleton() {
   return (
-    <div className="animate-pulse rounded-2xl border border-gray-100 bg-white overflow-hidden"
-      style={{ boxShadow: "0 1px 3px rgba(0,0,0,.04)" }}>
-      <div className="h-[116px] bg-gray-100" />
+    <div className="animate-pulse rounded-2xl border border-border bg-card overflow-hidden shadow-card">
+      <div className="h-[116px] bg-muted" />
       <div className="px-5 pt-4 pb-5">
-        <div className="h-4 w-2/3 rounded-md bg-gray-200" />
-        <div className="mt-2 h-3 w-full rounded-md bg-gray-100" />
-        <div className="mt-1 h-3 w-4/5 rounded-md bg-gray-100" />
-        <div className="mt-6 h-px bg-gray-100" />
+        <div className="h-4 w-2/3 rounded-md bg-muted" />
+        <div className="mt-2 h-3 w-full rounded-md bg-muted" />
+        <div className="mt-1 h-3 w-4/5 rounded-md bg-muted" />
+        <div className="mt-6 h-px bg-border-subtle" />
         <div className="mt-4 flex items-center justify-between">
-          <div className="h-6 w-20 rounded-md bg-gray-200" />
-          <div className="h-8 w-28 rounded-xl bg-gray-200" />
+          <div className="h-6 w-20 rounded-md bg-muted" />
+          <div className="h-8 w-28 rounded-md bg-muted" />
         </div>
       </div>
     </div>
@@ -312,10 +281,12 @@ function ProductsContent() {
   const searchParams = useSearchParams();
   const { t, locale } = useI18n();
   const { addItem } = useCart();
+  const { openCart } = useUI();
   const { format: formatPrice } = useCurrency();
   const [products, setProducts] = useState<Product[]>([]);
   const [allProducts, setAllProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+  const [quickId, setQuickId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
   const [sortBy, setSortBy] = useState("newest");
@@ -405,7 +376,7 @@ function ProductsContent() {
       price: parseFloat(product.price),
       type: product.type,
     });
-    toast.success(t("product.add_to_cart_success"));
+    openCart();
   }
 
   const tabs = [
@@ -422,17 +393,17 @@ function ProductsContent() {
       {/* ── Page header ── */}
       <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="mb-1 text-[11px] font-bold uppercase tracking-widest text-blue-600">
+          <p className="mb-1 text-[11px] font-medium text-primary">
             {t("home.cat.title")}
           </p>
-          <h1 className="text-2xl font-bold tracking-tight text-gray-900 sm:text-[26px]">
+          <h1 className="font-display text-2xl font-medium text-foreground sm:text-[26px]">
             {t("nav.products")}
           </h1>
-          <p className="mt-1 text-sm text-gray-500">{t("product.explore_desc")}</p>
+          <p className="mt-1 text-sm text-muted-foreground">{t("product.explore_desc")}</p>
         </div>
         {/* Search */}
         <div className="relative shrink-0 sm:w-64">
-          <MagnifyingGlass className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <MagnifyingGlass className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder={t("search.placeholder")}
             value={searchQuery}
@@ -443,32 +414,27 @@ function ProductsContent() {
       </div>
 
       {/* ── Tab filter + Sort ── */}
-      <div className="mb-6 flex items-center justify-between gap-4 border-b border-gray-200">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         {/* Tabs */}
-        <div className="flex items-center">
+        <div className="flex items-center gap-1 rounded-md border border-border bg-muted/70 p-1">
           {tabs.map((tab) => {
             const active = typeFilter === tab.value;
             return (
               <button
                 key={tab.value}
                 onClick={() => setTypeFilter(tab.value)}
-                className={cn(
-                  "relative flex items-center gap-1.5 px-4 py-2.5 text-[13.5px] font-medium transition-colors",
-                  active ? "text-blue-600" : "text-gray-500 hover:text-gray-900"
+                className={cn("relative flex items-center gap-2 rounded-md px-4 py-1.5 text-[13px] font-medium transition-colors duration-200 ease-out",
+                  active ? "bg-card text-foreground shadow-card" : "text-muted-foreground hover:text-foreground"
                 )}
               >
                 {tab.label}
                 <span
-                  className={cn(
-                    "rounded-full px-1.5 py-0.5 text-[11px] font-semibold",
-                    active ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-500"
+                  className={cn("rounded-md px-1.5 py-1 text-[11px] font-medium",
+                    active ? "bg-primary-soft text-primary" : "bg-accent text-muted-foreground"
                   )}
                 >
                   {tab.count}
                 </span>
-                {active && (
-                  <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full bg-blue-600" />
-                )}
               </button>
             );
           })}
@@ -495,10 +461,10 @@ function ProductsContent() {
         </div>
       ) : products.length === 0 ? (
         <div className="py-24 text-center">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gray-100">
-            <MagnifyingGlass className="h-7 w-7 text-gray-400" />
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-muted">
+            <MagnifyingGlass className="h-7 w-7 text-muted-foreground" />
           </div>
-          <p className="text-[15px] font-medium text-gray-700">{t("product.no_products_found")}</p>
+          <p className="text-[15px] font-medium text-foreground">{t("product.no_products_found")}</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
@@ -507,6 +473,7 @@ function ProductsContent() {
               key={product.id}
               product={product}
               onAddToCart={handleAddToCart}
+              onQuickView={setQuickId}
               getTitle={(p) => getLocalizedField(p, "title")}
               getDesc={(p) => getLocalizedField(p, "description")}
               getCategoryName={getCategoryName}
@@ -519,16 +486,18 @@ function ProductsContent() {
 
       {/* ── Bottom ── */}
       {!loading && products.length > 0 && (
-        <div className="mt-10 flex items-center justify-between text-sm text-gray-400">
+        <div className="mt-10 flex items-center justify-between text-sm text-muted-foreground">
           <span>
-            {t("filter.showing") || "Showing"}{" "}
-            <span className="font-medium text-gray-600">{products.length}</span>{" "}
-            {t("filter.of") || "of"}{" "}
-            <span className="font-medium text-gray-600">{allProducts.length}</span>{" "}
+            {t("filter.showing")}{" "}
+            <span className="font-medium text-foreground">{products.length}</span>{" "}
+            {t("filter.of")}{" "}
+            <span className="font-medium text-foreground">{allProducts.length}</span>{" "}
             {t("nav.products").toLowerCase()}
           </span>
         </div>
       )}
+
+      <QuickView productId={quickId} open={!!quickId} onOpenChange={(v) => { if (!v) setQuickId(null); }} />
     </div>
   );
 }
@@ -538,10 +507,10 @@ export default function ProductsPage() {
     <Suspense
       fallback={
         <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
-          <div className="mb-8 h-8 w-48 animate-pulse rounded-lg bg-gray-200" />
+          <div className="mb-8 h-8 w-48 animate-pulse rounded-md bg-muted" />
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {[1, 2, 3, 4, 5, 6].map((i) => (
-              <div key={i} className="h-72 animate-pulse rounded-2xl bg-gray-100" />
+              <div key={i} className="h-72 animate-pulse rounded-2xl bg-muted" />
             ))}
           </div>
         </div>
