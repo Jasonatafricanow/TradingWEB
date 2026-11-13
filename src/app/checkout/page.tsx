@@ -58,6 +58,15 @@ export default function CheckoutPage() {
 
   useEffect(() => { setMounted(true); }, []);
 
+  // The sample coupon codes exist only in the in-memory demo store.
+  const [demoMode, setDemoMode] = useState(false);
+  useEffect(() => {
+    fetch("/api/public/settings")
+      .then(r => r.json())
+      .then(j => setDemoMode(j.data?.demo === true))
+      .catch(() => {});
+  }, []);
+
   useEffect(() => {
     fetch("/api/payment-methods")
       .then(r => r.json())
@@ -577,7 +586,7 @@ export default function CheckoutPage() {
                   {couponMessage.text}
                 </p>
               )}
-              {couponDiscount === 0 && !couponMessage && (
+              {demoMode && couponDiscount === 0 && !couponMessage && (
                 <p className="mt-2 text-[11.5px] text-muted-foreground">{t("checkout.coupon_hint")}</p>
               )}
             </div>

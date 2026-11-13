@@ -23,7 +23,7 @@ const DEMO_SITE = {
 
 export async function GET() {
   if (IS_DEMO_MODE) {
-    return NextResponse.json({ data: { site: DEMO_SITE } });
+    return NextResponse.json({ data: { site: DEMO_SITE, demo: true } });
   }
   try {
     const { db } = await import("@/lib/db");
