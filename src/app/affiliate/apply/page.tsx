@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
 import { ShareNetwork, Spinner } from "@phosphor-icons/react";
+import { apiFetch } from "@/lib/client-api"
 
 export default function AffiliateApplyPage() {
   const router = useRouter()
@@ -19,7 +20,7 @@ export default function AffiliateApplyPage() {
     if (!nickname.trim()) return toast.error("请填写推广昵称")
     setLoading(true)
     try {
-      const res = await fetch("/api/affiliates/apply", {
+      const res = await apiFetch("/api/affiliates/apply", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ nickname }),
       })

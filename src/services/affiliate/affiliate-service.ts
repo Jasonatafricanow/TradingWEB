@@ -62,19 +62,25 @@ export async function getMyAffiliate(userId: string): Promise<Record<string, any
 }
 
 export async function getAffiliateDashboard(affiliateId: string): Promise<Record<string, any>> {
-  const [[affRows], [refRows], [earnRows]] = await Promise.all([
+  const [[affRows], [refRows]] = await Promise.all([
     db.$client.execute('SELECT * FROM affiliates WHERE id = ?', [affiliateId]),
-    db.$client.execute("SELECT * FROM referrals WHERE affiliate_id = ? AND kind IN ('commission', 'reversal')", [affiliateId]),
-    db.$client.execute("SELECT commission FROM referrals WHERE affiliate_id = ? AND status = ? AND kind IN ('commission', 'reversal')", [affiliateId, 'approved']),
+    db.$client.execute(
+      "SELECT id, order_id, kind, commission, rate, status, available_at, created_at FROM referrals WHERE affiliate_id = ? AND kind IN ('commission', 'reversal') ORDER BY created_at DESC, kind ASC",
+      [affiliateId],
+    ),
   ]);
   const affiliate = (affRows as Record<string, any>[])[0];
   const referrals = refRows as Record<string, any>[];
-  const earnings = earnRows as Record<string, any>[];
+  // Sum in cents: a commission and its refund reversals must net to exactly 0.
+  const cents = (value: unknown) => Math.round(parseFloat(String(value ?? '0')) * 100);
+  const sumCents = (status: string) => referrals.filter((r) => r.status === status).reduce((s, r) => s + cents(r.commission), 0);
   return {
     affiliate,
-    totalReferrals: referrals.length || 0,
-    pendingCommission: referrals.filter((r) => r.status === 'pending').reduce((s: number, r) => s + parseFloat((r.commission as string) || '0'), 0),
-    approvedCommission: earnings.reduce((s: number, r) => s + parseFloat((r.commission as string) || '0'), 0),
+    // Orders that earned a commission; refund reversals are not extra orders.
+    totalReferrals: new Set(referrals.filter((r) => r.kind === 'commission').map((r) => r.order_id)).size,
+    pendingCommission: sumCents('pending') / 100,
+    approvedCommission: sumCents('approved') / 100,
+    referrals: referrals.slice(0, 50),
   };
 }
 

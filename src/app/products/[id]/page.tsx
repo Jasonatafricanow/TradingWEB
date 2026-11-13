@@ -38,6 +38,7 @@ import { toast } from "sonner";
 import Link from "next/link";
 import { parseDeliveryMethods, getDeliveryMethodByCode } from "@/config/delivery-methods";
 import type { CartItem } from "@/contexts/cart-context";
+import { apiFetch } from "@/lib/client-api";
 
 interface CategoryInfo {
   id: string;
@@ -270,7 +271,7 @@ export default function ProductDetailPage() {
   function submitReview() {
     if (!reviewForm.content) return toast.error(t("product.review_content_required"))
     setSubmitting(true)
-    fetch("/api/reviews", {
+    apiFetch("/api/reviews", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ product_id: params.id, ...reviewForm }),
     }).then(async (res) => {

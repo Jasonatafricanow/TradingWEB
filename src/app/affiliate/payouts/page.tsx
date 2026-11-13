@@ -7,8 +7,12 @@ import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { toast } from "sonner"
 import { CheckCircle, CurrencyDollar, Spinner, Warning } from "@phosphor-icons/react";
+import { apiFetch } from "@/lib/client-api"
+import { useI18n } from "@/contexts/i18n-context"
+import { eligibilityReason } from "@/lib/affiliate-eligibility"
 
 export default function AffiliatePayoutsPage() {
+  const { t } = useI18n()
   const [affiliate, setAffiliate] = useState<any>(null)
   const [eligibility, setEligibility] = useState<any>(null)
   const [amount, setAmount] = useState("")
@@ -17,8 +21,8 @@ export default function AffiliatePayoutsPage() {
 
   useEffect(() => {
     Promise.all([
-      fetch("/api/affiliates/me").then(r => r.json()),
-      fetch("/api/affiliates/eligibility").then(r => r.json()),
+      apiFetch("/api/affiliates/me").then(r => r.json()),
+      apiFetch("/api/affiliates/eligibility").then(r => r.json()),
     ]).then(([me, elig]) => {
       setAffiliate(me.data)
       setEligibility(elig.data)
@@ -30,14 +34,14 @@ export default function AffiliatePayoutsPage() {
     if (parseFloat(amount) > (eligibility?.maxWithdrawable || 0)) return toast.error("超出可提现金额")
     setLoading(true)
     try {
-      const res = await fetch("/api/affiliates/request-payout", {
+      const res = await apiFetch("/api/affiliates/request-payout", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ amount: parseFloat(amount) }),
       })
       if (!res.ok) throw new Error()
       toast.success("提现申请已提交")
       setAmount("")
-      const j = await fetch("/api/affiliates/me").then(r => r.json())
+      const j = await apiFetch("/api/affiliates/me").then(r => r.json())
       setAffiliate(j.data)
     } catch { toast.error("提现申请失败") }
     finally { setLoading(false) }
@@ -60,7 +64,7 @@ export default function AffiliatePayoutsPage() {
             <Alert variant="destructive">
               <Warning className="h-4 w-4" />
               <AlertTitle>暂不可提现</AlertTitle>
-              <AlertDescription>{eligibility.reason}</AlertDescription>
+              <AlertDescription>{eligibilityReason(t, eligibility.reason)}</AlertDescription>
             </Alert>
           )}
           {eligibility?.eligible && (

@@ -16,6 +16,7 @@ import { copyText } from "@/lib/client-safe"
 import { apiFetch } from "@/lib/client-api"
 import { translate } from "@/i18n"
 import { Copy, CurrencyDollar, ShareNetwork, SignOut, TrendUp, Users, Warning } from "@phosphor-icons/react";
+import { eligibilityReason } from "@/lib/affiliate-eligibility"
 
 export default function AffiliateDashboardPage() {
   const router = useRouter()
@@ -93,9 +94,11 @@ export default function AffiliateDashboardPage() {
         <Card className="mb-6 border-yellow-200">
           <CardHeader><CardTitle className="text-sm flex items-center gap-2"><Warning className="h-4 w-4 text-yellow-500" /> 提现条件未满足</CardTitle></CardHeader>
           <CardContent>
-            <p className="text-sm mb-2">{eligibility?.reason}</p>
-            <Progress value={(eligibility?.achieved / eligibility?.required) * 100} className="h-2" />
-            <p className="text-xs text-muted-foreground mt-2">{extra?.pushedOrders}/{extra?.targetOrders} 单推广</p>
+            <p className="text-sm mb-2">{eligibilityReason(t, eligibility?.reason)}</p>
+            <Progress value={eligibility?.required > 0 ? Math.min(100, (eligibility.achieved / eligibility.required) * 100) : 0} className="h-2" />
+            {eligibility?.required > 0 && (
+              <p className="text-xs text-muted-foreground mt-2">{translate(locale, "affiliate.payout_progress", { balance: "$" + Number(eligibility.achieved).toFixed(2), minimum: "$" + Number(eligibility.required).toFixed(2) })}</p>
+            )}
             {extra?.daysLeft > 0 && <p className="text-xs text-muted-foreground">还需等待 {extra.daysLeft} 天</p>}
           </CardContent>
         </Card>
@@ -126,8 +129,8 @@ export default function AffiliateDashboardPage() {
           <table className="w-full text-sm"><thead><tr className="border-b"><th className="text-left p-3">订单</th><th className="text-left p-3">佣金</th><th className="text-left p-3">费率</th><th className="text-left p-3">状态</th><th className="text-left p-3">时间</th></tr></thead>
             <tbody>{(!dashboard?.referrals || dashboard.referrals.length === 0) ? (
               <tr><td colSpan={5} className="text-center py-8 text-muted-foreground">暂无推广记录</td></tr>
-            ) : dashboard.referrals.map((r: { id: string; order_id?: string; commission?: string; rate?: string; status?: string; created_at: string }) => (
-              <tr key={r.id} className="border-b"><td className="p-3">{r.order_id?.slice(0, 8)}</td><td className="p-3">${parseFloat(r.commission || "0").toFixed(2)}</td><td className="p-3">{r.rate}%</td><td className="p-3"><Badge variant={r.status === "paid" ? "default" : "secondary"}>{r.status}</Badge></td><td className="p-3">{new Date(r.created_at).toLocaleDateString()}</td></tr>
+            ) : dashboard.referrals.map((r: { id: string; order_id?: string; kind?: string; commission?: string; rate?: string; status?: string; created_at: string }) => (
+              <tr key={r.id} className="border-b"><td className="p-3">{r.order_id?.slice(0, 8)}</td><td className={parseFloat(r.commission || "0") < 0 ? "p-3 text-red-600" : "p-3"}>{parseFloat(r.commission || "0") < 0 ? "-" : ""}${Math.abs(parseFloat(r.commission || "0")).toFixed(2)}</td><td className="p-3">{r.rate}%</td><td className="p-3">{r.kind === "reversal" ? <Badge variant="outline">{t("affiliate.kind_reversal")}</Badge> : <Badge variant={r.status === "paid" ? "default" : "secondary"}>{r.status && ["pending", "approved", "paid"].includes(r.status) ? t(`affiliate.status.${r.status}`) : r.status}</Badge>}</td><td className="p-3">{new Date(r.created_at).toLocaleDateString()}</td></tr>
             ))}</tbody>
           </table>
         </CardContent>

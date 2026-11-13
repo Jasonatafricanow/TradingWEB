@@ -1,6 +1,7 @@
 ﻿import { db } from '@/lib/db';
 import { eq, gte } from 'drizzle-orm';
 import { orders } from '@/storage/database/shared/schema';
+import type { WithdrawEligibility } from './types';
 
 export const defaultStrategy = {
   name: 'default',
@@ -15,17 +16,20 @@ export const defaultStrategy = {
     return Math.round(commission * 100) / 100;
   },
 
-  async checkWithdrawEligibility(affiliateId: string): Promise<{ eligible: boolean; reason?: string }> {
+  // reason is a code the client translates; achieved/required drive the progress bar.
+  async checkWithdrawEligibility(affiliateId: string): Promise<WithdrawEligibility> {
+    const none = { maxWithdrawable: 0, achieved: 0, required: 0 };
     try {
       const [affRows] = await db.$client.execute('SELECT balance, min_payout FROM affiliates WHERE id = ?', [affiliateId]);
       const affiliate = (affRows as Record<string, any>[])[0];
-      if (!affiliate) return { eligible: false, reason: 'Affiliate not found' };
-      if (parseFloat(affiliate.balance || '0') < parseFloat(affiliate.min_payout || '10')) {
-        return { eligible: false, reason: 'Minimum payout not reached' };
-      }
-      return { eligible: true };
+      if (!affiliate) return { eligible: false, reason: 'affiliate_not_found', ...none };
+      const balance = parseFloat(affiliate.balance || '0');
+      const minimum = parseFloat(affiliate.min_payout || '10');
+      const amounts = { maxWithdrawable: balance, achieved: balance, required: minimum };
+      if (balance < minimum) return { eligible: false, reason: 'min_payout_not_reached', ...amounts };
+      return { eligible: true, ...amounts };
     } catch (error) {
-      return { eligible: false, reason: 'Error checking eligibility' };
+      return { eligible: false, reason: 'eligibility_check_failed', ...none };
     }
   },
 
