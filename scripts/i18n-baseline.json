@@ -2,5 +2,5 @@
   "version": 1,
   "baselineCommit": "f3672bc199f2c29071b0c95e86949d613436fe27",
   "roots": ["src"],
-  "excludes": ["src/i18n"]
+  "excludes": ["src/i18n", "src/lib/demo"]
 }

@@ -617,3 +617,19 @@ export function demoCustomers(limit = 12) {
     };
   });
 }
+/** 演示模式的转化漏斗（标签与数据都是演示用的固定文案） */
+export function demoFunnelSteps(totalUv: number, checkoutCount: number, paidOrderCount: number) {
+  const pct = (n: number) => Number(((n / Math.max(1, totalUv)) * 100).toFixed(1));
+  return [
+    { label: '访问', count: totalUv, rate: 100 },
+    { label: '浏览商品', count: Math.round(totalUv * 0.62), rate: 62 },
+    { label: '加入购物车', count: Math.round(totalUv * 0.21), rate: 21 },
+    { label: '进入结算', count: checkoutCount, rate: pct(checkoutCount) },
+    { label: '完成支付', count: paidOrderCount, rate: pct(paidOrderCount) },
+  ];
+}
+
+/** 演示模式下后台改订单状态时写入的时间线说明 */
+export function demoStatusNote(status: string) {
+  return `状态更新为 ${status}`;
+}

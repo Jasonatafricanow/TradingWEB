@@ -314,7 +314,7 @@ export async function updateAdminOrder(id: string, data: Record<string, unknown>
       o.timeline.push({
         id: `${o.id}-t${o.timeline.length + 1}`,
         action: status,
-        description: `状态更新为 ${status}`,
+        description: m.demoStatusNote(status),
         created_at: new Date().toISOString(),
       });
     }

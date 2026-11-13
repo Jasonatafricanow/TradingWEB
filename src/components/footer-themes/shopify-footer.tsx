@@ -105,7 +105,7 @@ export function ShopifyFooter() {
         {/* Bottom bar */}
         <div className="mt-12 flex flex-col items-center justify-between gap-4 border-t border-[var(--footer-border)] pt-8 sm:flex-row text-xs text-[var(--footer-muted)]">
           <p>
-            &copy; {new Date().getFullYear()} GlobalTrade Hub. {t("footer.rights")}.
+            &copy; {new Date().getFullYear()} {t("brand.name")}. {t("footer.rights")}.
           </p>
           <p className="manifest-line">{t("footer.facts")}</p>
         </div>

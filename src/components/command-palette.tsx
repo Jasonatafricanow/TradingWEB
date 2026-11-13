@@ -187,7 +187,7 @@ export function CommandPalette() {
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[13px] font-medium">{loc(p)}</span>
-                  <span className="manifest-line mt-0.5 block">{p.vendor || "GlobalTrade"}</span>
+                  <span className="manifest-line mt-0.5 block">{p.vendor || t("brand.short")}</span>
                 </span>
                 <span className="shrink-0 text-[13px] tabular-nums text-muted-foreground">
                   {format(Number(p.price))}
@@ -226,7 +226,7 @@ export function CommandPalette() {
         <span className="flex items-center gap-1.5">
           <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">↑↓</kbd>
           <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">↵</kbd>
-          <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">esc</kbd>
+          <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">{t("kbd.esc")}</kbd>
         </span>
       </div>
     </CommandDialog>

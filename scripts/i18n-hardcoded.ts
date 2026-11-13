@@ -57,7 +57,10 @@ function normalizeLiteral(value: string): string {
 }
 
 function isMeaningfulLiteral(value: string): boolean {
-  return value.length > 1 && /[\p{L}\p{N}]/u.test(value);
+  // A template made only of placeholders and separators (`${a} · ${b}`) has no
+  // translatable text of its own; judge only the literal parts.
+  const text = value.split("{expression}").join("");
+  return text.length > 1 && /[\p{L}\p{N}]/u.test(text);
 }
 
 function expressionLiteral(node: ts.Expression): string | null {

@@ -183,7 +183,7 @@ export default function AboutPage() {
                 <Button asChild size="lg" variant="outline" className="border-white/30 bg-transparent text-white hover:bg-white/10 hover:text-white">
                   <a href="https://wa.me/258878888181" target="_blank" rel="noopener noreferrer">
                     <ChatCircle className="mr-1 h-4 w-4" />
-                    WhatsApp
+                    {t("about.whatsapp")}
                   </a>
                 </Button>
               </div>

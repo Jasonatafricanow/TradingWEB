@@ -39,7 +39,9 @@ interface Order {
   order_items?: OrderItem[];
 }
 
-type Status = "loading" | "paid" | "pending" | "unknown";
+// Payment state codes, not display text.
+const PAYMENT_STATE = { loading: "loading", paid: "paid", pending: "pending", unknown: "unknown" } as const;
+type Status = (typeof PAYMENT_STATE)[keyof typeof PAYMENT_STATE];
 
 export default function CheckoutSuccessPage() {
   const { t, locale } = useI18n();
@@ -53,10 +55,10 @@ export default function CheckoutSuccessPage() {
     if (authLoading) return;
     let active = true;
     const id = new URLSearchParams(window.location.search).get("order_id");
-    if (!id) { setStatus("unknown"); return; }
+    if (!id) { setStatus(PAYMENT_STATE.unknown); return; }
     // The order exists now; a new checkout in this tab must get a new key.
     clearCheckoutAttempt();
-    if (!user) { setStatus("unknown"); return; }
+    if (!user) { setStatus(PAYMENT_STATE.unknown); return; }
     apiFetch(`/api/orders/${encodeURIComponent(id)}`)
       .then(async (response) => {
         if (!response.ok) throw new Error("Order unavailable");
@@ -64,9 +66,9 @@ export default function CheckoutSuccessPage() {
         if (!active) return;
         const data = json.data as Order | undefined;
         setOrder(data ?? null);
-        setStatus(data?.payment_status === "paid" ? "paid" : "pending");
+        setStatus(data?.payment_status === PAYMENT_STATE.paid ? PAYMENT_STATE.paid : PAYMENT_STATE.pending);
       })
-      .catch(() => { if (active) setStatus("unknown"); });
+      .catch(() => { if (active) setStatus(PAYMENT_STATE.unknown); });
     return () => { active = false; };
   }, [authLoading, user]);
 

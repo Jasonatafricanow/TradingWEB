@@ -202,7 +202,7 @@ export function TechNavbar() {
               className="flex h-9 items-center gap-2 rounded-md px-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
             >
               <MagnifyingGlass className="h-4 w-4" weight="duotone" />
-              <span className="hidden font-mono text-[11px] xl:inline">⌘K</span>
+              <span className="hidden font-mono text-[11px] xl:inline">{t("kbd.cmdk")}</span>
             </button>
 
             <button

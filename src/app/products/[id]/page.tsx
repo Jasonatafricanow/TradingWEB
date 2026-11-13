@@ -754,7 +754,7 @@ export default function ProductDetailPage() {
                   <button
                     key={star}
                     onClick={() => setReviewForm({ ...reviewForm, rating: star })}
-                    aria-label={`${star}/5`}
+                    aria-label={t("product.stars_aria").replace("{n}", String(star))}
                     className="transition-transform duration-150"
                   >
                     <Star className={cn("h-5 w-5", star <= reviewForm.rating ? "text-amber-500" : "text-border")} weight={star <= reviewForm.rating ? "fill" : "regular"} />
@@ -798,7 +798,7 @@ export default function ProductDetailPage() {
                         </span>
                         <div>
                           <div className="flex items-center gap-2">
-                            <span className="text-[13px] font-medium">{rv.author || "GlobalTrade"}</span>
+                            <span className="text-[13px] font-medium">{rv.author || t("brand.short")}</span>
                             {rv.is_verified && (
                               <span className="inline-flex items-center gap-0.5 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
                                 <SealCheck className="h-3 w-3" weight="fill" />

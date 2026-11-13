@@ -147,7 +147,7 @@ export function QuickView({
             </div>
 
             <div className="flex flex-col p-6">
-              <p className="manifest-line">{product.vendor || "GlobalTrade"}</p>
+              <p className="manifest-line">{product.vendor || t("brand.short")}</p>
               <h2 className="mt-2 text-xl leading-snug">{loc("title")}</h2>
 
               <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12.5px] text-muted-foreground">

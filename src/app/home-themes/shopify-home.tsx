@@ -161,12 +161,12 @@ export function ShopifyHome() {
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-[13.5px] font-medium">{localized(p, "title")}</p>
                         <p className="manifest-line mt-1">
-                          {manifestRef(p.id)} · {p.vendor || "GlobalTrade"} · {t("home.preview.in_stock")} {p.stock ?? 0}
+                          {manifestRef(p.id)} · {p.vendor || t("brand.short")} · {t("home.preview.in_stock")} {p.stock ?? 0}
                         </p>
                       </div>
                       <div className="hidden shrink-0 text-right sm:block">
                         <p className="text-[13px] font-medium tabular-nums">{formatPrice(Number(p.price))}</p>
-                        <p className="manifest-line mt-1">{t("home.preview.free_over")} $300</p>
+                        <p className="manifest-line mt-1">{t("home.preview.free_over")} {formatPrice(300)}</p>
                       </div>
                       <CaretRight className="h-4 w-4 shrink-0 text-muted-foreground" />
                     </Link>
@@ -465,7 +465,7 @@ export function ShopifyHome() {
                   <Link href="/consulting">{t("home.featured_consulting.btn")}</Link>
                 </Button>
                 <span className="text-[13px] text-muted-foreground">
-                  {t("home.advisory.from")} <span className="tabular-nums text-foreground">$299.00</span>
+                  {t("home.advisory.from")} <span className="tabular-nums text-foreground">{formatPrice(299)}</span>
                 </span>
               </div>
             </div>

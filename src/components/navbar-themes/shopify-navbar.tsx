@@ -163,10 +163,10 @@ export function ShopifyNavbar() {
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2 shrink-0 rounded-md px-1 py-1">
             <span className="font-display text-[17px] font-medium text-foreground">
-              GlobalTrade
+              {t("brand.short")}
             </span>
             <span className="hidden sm:inline text-[11px] font-medium text-muted-foreground tracking-wide">
-              Hub
+              {t("brand.hub")}
             </span>
           </Link>
 
@@ -252,7 +252,7 @@ export function ShopifyNavbar() {
               className="flex h-9 items-center gap-2 rounded-md px-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
             >
               <MagnifyingGlass className="h-4 w-4" />
-              <span className="hidden font-mono text-[11px] xl:inline">⌘K</span>
+              <span className="hidden font-mono text-[11px] xl:inline">{t("kbd.cmdk")}</span>
             </button>
 
             <button
@@ -263,7 +263,7 @@ export function ShopifyNavbar() {
               <ShoppingCart className="h-4 w-4" />
               {cartCount > 0 && (
                 <span className="absolute -right-0.5 -top-1 flex h-4 min-w-4 items-center justify-center rounded-md px-1 text-[11px] font-medium text-primary-foreground bg-primary">
-                  {cartCount > 9 ? "9+" : cartCount}
+                  {cartCount > 9 ? t("nav.cart_overflow") : cartCount}
                 </span>
               )}
             </button>

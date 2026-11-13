@@ -5,6 +5,7 @@ import * as SheetPrimitive from "@radix-ui/react-dialog"
 import { XIcon } from "lucide-react"
 
 import { cn } from "@/lib/utils"
+import { useI18n } from "@/contexts/i18n-context"
 
 function Sheet({ ...props }: React.ComponentProps<typeof SheetPrimitive.Root>) {
   return <SheetPrimitive.Root data-slot="sheet" {...props} />
@@ -53,6 +54,7 @@ function SheetContent({
   side?: "top" | "right" | "bottom" | "left"
   title?: string
 }) {
+  const { t } = useI18n()
   const hasChildTitle = React.Children.toArray(children).some(
     (child) => React.isValidElement(child) && child.type === SheetTitle
   )
@@ -75,7 +77,7 @@ function SheetContent({
         {...props}
       >
         {!hasChildTitle && (
-          <SheetPrimitive.Title className="sr-only">{title ?? "Panel"}</SheetPrimitive.Title>
+          <SheetPrimitive.Title className="sr-only">{title ?? t("common.panel")}</SheetPrimitive.Title>
         )}
         {children}
         <SheetPrimitive.Close className="ring-offset-background focus:ring-ring data-[state=open]:bg-secondary absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none">

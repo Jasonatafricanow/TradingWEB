@@ -401,7 +401,7 @@ export default function CheckoutPage() {
                     ? <span className="ml-0.5 text-destructive">*</span>
                     : <span className="ml-1 text-xs text-muted-foreground">{t("checkout.phone_optional")}</span>}
                 </Label>
-                <Input id="phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+86 138 0013 8000" autoComplete="tel" required={isOfflineProvider} />
+                <Input id="phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder={t("checkout.phone_placeholder")} autoComplete="tel" required={isOfflineProvider} />
                 {isOfflineProvider && (
                   <p className="text-[12px] text-muted-foreground">{t("checkout.phone_offline_note")}</p>
                 )}

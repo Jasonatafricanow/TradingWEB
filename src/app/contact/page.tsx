@@ -107,7 +107,7 @@ export default function ContactPage() {
                     <MapPin className="h-3.5 w-3.5" />
                     {t("contact.hq")}
                   </p>
-                  <p className="mt-1 text-sm text-white/90">Century Avenue 100, Pudong, Shanghai</p>
+                  <p className="mt-1 text-sm text-white/90">{t("contact.address_line")}</p>
                 </div>
               </div>
             </div>
@@ -164,7 +164,7 @@ export default function ContactPage() {
                         type="email"
                         value={form.email}
                         onChange={(e) => setForm({ ...form, email: e.target.value })}
-                        placeholder="you@company.com"
+                        placeholder={t("contact.email_placeholder")}
                         autoComplete="email"
                       />
                     </div>

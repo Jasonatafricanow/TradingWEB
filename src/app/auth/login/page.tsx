@@ -34,8 +34,8 @@ export default function LoginPage() {
 }
 
 const DEMO_ACCOUNTS = [
-  { label: "Buyer", email: "demo@example.com", password: "demo123" },
-  { label: "Admin", email: "admin@globaltrade.enterprise", password: "admin123" },
+  { labelKey: "auth.demo_buyer", email: "demo@example.com", password: "demo123" },
+  { labelKey: "auth.demo_admin", email: "admin@globaltrade.enterprise", password: "admin123" },
 ];
 
 function LoginPageInner() {
@@ -97,7 +97,7 @@ function LoginPageInner() {
               <Globe className="h-5 w-5 text-white" weight="bold" />
             </span>
             <span className="font-display text-[17px] font-medium text-white">
-              GlobalTrade Hub
+              {t("brand.name")}
             </span>
           </Link>
 
@@ -245,7 +245,7 @@ function LoginPageInner() {
                   className="rounded-xl border border-border bg-card px-3 py-2 text-left transition-colors duration-200 hover:border-primary hover:shadow-card"
                 >
                   <span className="block text-[11px] font-medium text-primary">
-                    {acc.label}
+                    {t(acc.labelKey)}
                   </span>
                   <span className="mt-1 block truncate font-mono text-[11px] text-muted-foreground">
                     {acc.email}

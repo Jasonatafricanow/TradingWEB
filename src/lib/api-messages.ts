@@ -26,6 +26,9 @@ export const API_MESSAGES = {
   invalidAffiliateCommission: "Invalid affiliate commission settings",
   commissionMaturityFailed: "Commission maturity run failed",
   walletUnavailable: "Wallet balance changed; review your order before retrying",
+  refundForbidden: "Unauthorized",
+  refundAlreadyRequested: "Refund already requested",
+  orderNotRefundable: "Order cannot be refunded",
 } as const;
 
 export const IMPORT_MESSAGES = {

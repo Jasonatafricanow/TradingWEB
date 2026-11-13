@@ -64,7 +64,7 @@ export default function AffiliateDashboardPage() {
   if (affiliate.status === "deactivated") return <div className="mx-auto max-w-md py-20 text-center"><Alert variant="destructive"><Warning className="h-4 w-4" /><AlertTitle>已退出</AlertTitle><AlertDescription>您的推广账户已停用。</AlertDescription></Alert></div>
 
   const refUrl = `${window.location.origin}/ref/${affiliate.code}`
-  const copyLink = () => { void copyText(refUrl).then((ok) => { if (ok) toast.success("推广链接已复制"); else toast.error("复制失败，请长按手动复制"); }) }
+  const copyLink = () => { void copyText(refUrl).then((ok) => { if (ok) toast.success("推广链接已复制"); else toast.error(t("common.copy_failed")); }) }
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-8">

@@ -107,13 +107,7 @@ export async function getTrafficSummary(days: number = 30): Promise<TrafficSumma
       whatsappClicks: 1842, uniqueWaVisitors: 1130,
       conversionRate: Number(((paidOrderCount / Math.max(1,totalUv)) * 100).toFixed(2)),
       checkoutCount, paidOrderCount,
-      funnelSteps: [
-        { label: '访问', count: totalUv, rate: 100 },
-        { label: '浏览商品', count: Math.round(totalUv*0.62), rate: 62 },
-        { label: '加入购物车', count: Math.round(totalUv*0.21), rate: 21 },
-        { label: '进入结算', count: checkoutCount, rate: Number(((checkoutCount/totalUv)*100).toFixed(1)) },
-        { label: '完成支付', count: paidOrderCount, rate: Number(((paidOrderCount/totalUv)*100).toFixed(1)) },
-      ],
+      funnelSteps: m.demoFunnelSteps(totalUv, checkoutCount, paidOrderCount),
     };
   }
   const since = new Date(Date.now() - days * 86400000);

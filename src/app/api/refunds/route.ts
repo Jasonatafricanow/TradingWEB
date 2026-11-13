@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { API_MESSAGES } from "@/lib/api-messages"
 import { requireUser, errorResponse } from "@/services/auth/auth-middleware"
 import { db } from '@/lib/db'
 import { eq, and } from 'drizzle-orm'
@@ -20,10 +21,10 @@ export async function POST(request: NextRequest) {
     if (IS_DEMO_MODE) {
       const { demoGetOrder, demoCreateRefund } = await import("@/lib/demo/commerce")
       const o = demoGetOrder(order_id)
-      if (!o) return NextResponse.json({ error: "Order not found" }, { status: 404 })
-      if (o.user_id !== user.id) return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
-      if (o.has_refund) return NextResponse.json({ error: "Refund already requested" }, { status: 409 })
-      if (o.status !== "paid" && o.status !== "processing") return NextResponse.json({ error: "Order cannot be refunded" }, { status: 400 })
+      if (!o) return NextResponse.json({ error: API_MESSAGES.orderNotFound }, { status: 404 })
+      if (o.user_id !== user.id) return NextResponse.json({ error: API_MESSAGES.refundForbidden }, { status: 403 })
+      if (o.has_refund) return NextResponse.json({ error: API_MESSAGES.refundAlreadyRequested }, { status: 409 })
+      if (o.status !== "paid" && o.status !== "processing") return NextResponse.json({ error: API_MESSAGES.orderNotRefundable }, { status: 400 })
       return NextResponse.json({ data: demoCreateRefund(order_id, reason) })
     }
 

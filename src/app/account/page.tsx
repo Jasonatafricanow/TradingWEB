@@ -165,7 +165,7 @@ export default function AccountPage() {
   const copyToClipboard = (code: string) => {
     void copyText(code).then((ok) => {
       if (ok) toast.success(locale === "zh" ? `优惠码 ${code} 已复制` : `Coupon ${code} copied`);
-      else toast.error(locale === "zh" ? "复制失败，请长按手动复制" : "Copy failed, please copy manually");
+      else toast.error(t("common.copy_failed"));
     });
   };
 
