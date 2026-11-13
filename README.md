@@ -10,7 +10,7 @@ A storefront and operations backend that keeps online orders, store sales and Sh
 - Payment completion, stock deduction, coupon redemption and timeline writes share a transaction.
 - POS retries and migration imports enter through server-owned contracts.
 
-See [the implementation guide](docs/IMPLEMENTATION.md), [tests](src) and [change history](CHANGELOG.md). Authentication and payment hardening details are recorded in the change history.
+See [the implementation guide](docs/IMPLEMENTATION.md), [tests](src), [change history](CHANGELOG.md) and [project lineage](PROJECT-HISTORY.md). Authentication and payment hardening details are recorded in the change history.
 
 ## Run and verify
 

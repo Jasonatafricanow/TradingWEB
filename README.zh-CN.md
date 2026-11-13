@@ -10,7 +10,7 @@
 - 支付完成、扣库存、核销优惠券、写订单时间线在同一事务内完成。
 - POS 重试和数据迁移都通过服务端契约写入。
 
-详见[实现说明](docs/IMPLEMENTATION.md)、[源码与测试](src)及[变更记录](CHANGELOG.md)。鉴权和支付修复的历史放在变更记录中。
+详见[实现说明](docs/IMPLEMENTATION.md)、[源码与测试](src)、[变更记录](CHANGELOG.md)及[项目沿革](PROJECT-HISTORY.md)（英文）。鉴权和支付修复的历史放在变更记录中。
 
 ## 运行与验证
 
