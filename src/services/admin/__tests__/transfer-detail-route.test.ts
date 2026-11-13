@@ -8,7 +8,10 @@ const mocks = vi.hoisted(() => ({
   approveTransfer: vi.fn().mockResolvedValue(undefined),
   completeTransfer: vi.fn().mockResolvedValue(undefined),
   cancelTransfer: vi.fn().mockResolvedValue(undefined),
+  resolveStaffStoreScope: vi.fn().mockResolvedValue("store-1"),
 }));
+
+vi.mock("@/services/admin/staff-store-scope", () => ({ resolveStaffStoreScope: mocks.resolveStaffStoreScope }));
 
 vi.mock("@/services/auth/auth-middleware", () => ({
   requireStaffRole: mocks.requireStaffRole,
@@ -59,6 +62,8 @@ describe("legacy transfer detail route", () => {
     }), context);
 
     expect(mocks.requireStaffRole).toHaveBeenCalledWith(expect.anything(), ["admin", "manager"]);
+    // Store-bound actors are confined to their own store's transfers.
+    expect(mocks.cancelTransfer).toHaveBeenCalledWith("transfer-1", "manager-1", undefined, { storeId: "store-1" });
     expect(response.status).toBe(404);
     await expect(response.json()).resolves.toEqual({ error: { code: "TRANSFER_NOT_FOUND", message: "missing" } });
   });

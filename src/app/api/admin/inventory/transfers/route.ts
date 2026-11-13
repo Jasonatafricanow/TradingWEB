@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { requireUser, requireStaffRole, errorResponse } from "@/services/auth/auth-middleware"
 import { createTransfer, getTransfers } from "@/services/admin/transfer-service"
+import { resolveStaffStoreScope } from "@/services/admin/staff-store-scope"
 
 export async function GET(request: NextRequest) {
   try {
@@ -30,7 +31,10 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Store-bound staff may only ship stock out of their own store.
+    const storeScope = await resolveStaffStoreScope(user)
     const result = await createTransfer({
+      ...(storeScope ? { storeId: storeScope } : {}),
       fromWarehouseId: body.fromWarehouseId,
       toWarehouseId: body.toWarehouseId,
       shippingMethod: body.shippingMethod,

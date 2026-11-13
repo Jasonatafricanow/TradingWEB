@@ -47,6 +47,7 @@ const roleLabelKeys: Record<string, TranslationKey> = {
   admin: "role.admin",
   operator: "role.operator",
   support: "role.support",
+  manager: "role.manager",
 };
 
 export function AdminSidebar() {
@@ -56,6 +57,7 @@ export function AdminSidebar() {
   const { t, locale, setLocale } = useI18n();
   const [staffRole, setStaffRole] = useState<string | null>(null);
   const [staffName, setStaffName] = useState<string | null>(null);
+  const [staffSections, setStaffSections] = useState<string[] | undefined>(undefined);
   const [expandedGroupIds, setExpandedGroupIds] = useState<Set<string>>(() =>
     initialExpandedGroupIds(pathname),
   );
@@ -75,6 +77,7 @@ export function AdminSidebar() {
         if (json?.data) {
           setStaffRole(json.data.role);
           setStaffName(json.data.name);
+          setStaffSections(Array.isArray(json.data.sections) ? json.data.sections : undefined);
         }
       })
       .catch(() => { /* 网络错误静默忽略，角色保持 null */ });
@@ -84,7 +87,7 @@ export function AdminSidebar() {
     setExpandedGroupIds((current) => expandForPathname(current, pathname));
   }, [pathname]);
 
-  const navGroups = filterNavigationForRole(ADMIN_NAV_GROUPS, staffRole);
+  const navGroups = filterNavigationForRole(ADMIN_NAV_GROUPS, staffRole, staffSections);
 
   return (
     <aside className="flex h-screen w-64 flex-col border-r bg-white shadow-sm">

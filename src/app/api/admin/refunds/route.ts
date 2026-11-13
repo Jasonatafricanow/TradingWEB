@@ -25,12 +25,13 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     await requireStaffRole(request, ["admin", "operator"]);
+    const user = await requireUser(request)
     const body = await request.json()
     const { order_id, reason, amount, order_item_id, evidence } = body
     if (!order_id || !reason || !amount) {
       return NextResponse.json({ error: "order_id, reason, and amount are required" }, { status: 400 })
     }
-    const data = await createRefund({ order_id, reason, amount, evidence })
+    const data = await createRefund({ order_id, reason, amount, evidence, processed_by: user.id })
     return NextResponse.json({ data })
   } catch (err) {
     return errorResponse(err)
@@ -58,7 +59,7 @@ export async function PUT(request: NextRequest) {
     let data
     if (action === "payout" || action === "reconcile") {
       await requireStaffRole(request, ["admin"]);
-      data = action === "payout" ? await submitPayPalRefund(id, user.id) : await completeRefund(id, transaction_id);
+      data = action === "payout" ? await submitPayPalRefund(id, user.id) : await completeRefund(id, transaction_id, user.id);
     } else if (action === "restock") {
       data = await restockWebRefund(id, user.id, return_items || []);
     } else if (action === "returned") {

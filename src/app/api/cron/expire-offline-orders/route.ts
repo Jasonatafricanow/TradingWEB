@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { isAuthorizedCronRequest } from "@/lib/cron-auth";
+import { cancelUnpaidOrder } from "@/services/orders/order-service";
 
 /**
  * POST /api/cron/expire-offline-orders
@@ -14,16 +15,19 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const [result] = await db.$client.execute(
-      `UPDATE orders
-       SET status = 'cancelled', updated_at = NOW()
-       WHERE payment_method NOT IN ('paypal', 'stripe')
+    // One transaction per order so each cancellation also returns its wallet share.
+    const [rows] = await db.$client.execute(
+      `SELECT id FROM orders
+       WHERE payment_method NOT IN ('paypal', 'stripe', 'wallet')
          AND payment_status = 'unpaid'
          AND status = 'pending'
-         AND created_at < DATE_SUB(NOW(), INTERVAL 72 HOUR)`
+         AND created_at < DATE_SUB(NOW(), INTERVAL 72 HOUR)
+       LIMIT 1000`
     );
-
-    const cancelled = (result as { affectedRows?: number }).affectedRows ?? 0;
+    let cancelled = 0;
+    for (const { id } of rows as Array<{ id: string }>) {
+      if (await cancelUnpaidOrder(id, "offline payment not received within 72 hours")) cancelled += 1;
+    }
 
     return NextResponse.json({
       success: true,

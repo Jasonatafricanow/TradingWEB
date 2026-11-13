@@ -47,11 +47,22 @@ export async function requireStaffRole(request: Request, allowedRoles: string[])
     if (user.staffId && user.role && allowedRoles.includes(user.role)) {
       return
     }
+    // Managers get the admin sections an admin granted them (role-permissions).
+    if (user.staffId && user.role === "manager" && await managerGrantCovers(request)) {
+      return
+    }
     throw new AuthError("Insufficient permissions", 403)
   } catch (err) {
     if (err instanceof AuthError) throw err
     throw new AuthError("Permission check failed", 403)
   }
+}
+
+async function managerGrantCovers(request: Request): Promise<boolean> {
+  const { managerMayUse } = await import("@/lib/admin-sections")
+  const { loadManagerGrant } = await import("@/services/admin/role-permissions-service")
+  const pathname = new URL(request.url).pathname
+  return managerMayUse(await loadManagerGrant(), pathname)
 }
 
 export function withAuth<T extends (...args: unknown[]) => Promise<Response>>(
@@ -96,7 +107,10 @@ export function errorResponse(err: unknown): NextResponse {
   }
   // 错误日志：5xx 写到 stderr，4xx 仅在开发环境输出。
   if (status >= 500) {
-    body.error = "Internal server error";
+    // Hide internal messages, but keep the stable code/retryable contract for clients.
+    body.error = err instanceof AppError
+      ? { code: err.code, message: "Internal server error", retryable: err.retryable }
+      : "Internal server error";
     console.error("[api-error]", { status, message, err });
   } else if (process.env.NODE_ENV !== "production") {
     console.warn("[api-warn]", { status, message });

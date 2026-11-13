@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import Papa from "papaparse";
+import { useI18n } from "@/contexts/i18n-context";
+import { translate } from "@/i18n";
 import { CheckCircle, Download, FileText, Spinner, Upload, WarningCircle, XCircle } from "@phosphor-icons/react";
 
 const TEMPLATE_COLUMNS = [
@@ -41,9 +43,11 @@ interface ImportResult {
   failed: number;
   total: number;
   errors?: { row: number; error: string }[];
+  warnings?: { row: number; warning: string }[];
 }
 
 export default function AdminProductsImportPage() {
+  const { t, locale } = useI18n();
   const [file, setFile] = useState<File | null>(null);
   const [parsedData, setParsedData] = useState<Record<string, string>[] | null>(null);
   const [rowErrors, setRowErrors] = useState<{ row: number; error: string }[]>([]);
@@ -442,6 +446,16 @@ export default function AdminProductsImportPage() {
                         {result.errors.map((e, i) => (
                           <p key={i} className="text-xs text-red-500">
                             第 {e.row} 行: {e.error}
+                          </p>
+                        ))}
+                      </div>
+                    )}
+                    {result.warnings && result.warnings.length > 0 && (
+                      <div className="mt-3 max-h-32 overflow-y-auto">
+                        <p className="text-xs font-medium text-amber-600 mb-1">{t("admin.import.warnings_title")}</p>
+                        {result.warnings.map((w, i) => (
+                          <p key={i} className="text-xs text-amber-600">
+                            {translate(locale, "admin.import.row_warning", { row: w.row, warning: w.warning })}
                           </p>
                         ))}
                       </div>

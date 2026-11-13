@@ -18,3 +18,44 @@ export function escapeCsvField(value: unknown): string {
 export function toCsv(rows: unknown[][]): string {
   return rows.map((row) => row.map(escapeCsvField).join(",")).join("\n");
 }
+
+export const CSV_EXPORT_PAGE_SIZE = 500
+
+/**
+ * Streams a CSV in pages so a large export never holds every row (or one
+ * query per row) in memory. `fetchPage(offset, limit)` returns already
+ * mapped rows; an empty or short page ends the stream.
+ */
+export function csvStream(
+  header: unknown[],
+  fetchPage: (offset: number, limit: number) => Promise<unknown[][]>,
+  options: { pageSize?: number; bom?: boolean } = {},
+): ReadableStream<Uint8Array> {
+  const pageSize = options.pageSize ?? CSV_EXPORT_PAGE_SIZE
+  const encoder = new TextEncoder()
+  let offset = 0
+  let started = false
+  let done = false
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      if (!started) {
+        started = true
+        controller.enqueue(encoder.encode((options.bom ? "\uFEFF" : "") + header.map(escapeCsvField).join(",")))
+        return
+      }
+      if (done) {
+        controller.close()
+        return
+      }
+      try {
+        const rows = await fetchPage(offset, pageSize)
+        offset += rows.length
+        if (rows.length < pageSize) done = true
+        if (rows.length > 0) controller.enqueue(encoder.encode("\n" + toCsv(rows)))
+        if (done) controller.close()
+      } catch (error) {
+        controller.error(error)
+      }
+    },
+  })
+}

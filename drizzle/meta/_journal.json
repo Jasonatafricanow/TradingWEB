@@ -253,6 +253,34 @@
       "when": 1784937600000,
       "tag": "0036_revoked_sessions",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1785024000000,
+      "tag": "0037_email_outbox_notification_dedupe",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1785110400000,
+      "tag": "0038_pos_refund_tenders",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1785196800000,
+      "tag": "0039_relax_legacy_stock_transfer_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1785283200000,
+      "tag": "0040_member_wallet_commission",
+      "breakpoints": true
     }
   ]
 }

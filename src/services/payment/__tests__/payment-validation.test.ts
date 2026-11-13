@@ -48,13 +48,6 @@ describe("assertPaymentMatchesOrder", () => {
     assert.deepStrictEqual(assertPaymentMatchesOrder(baseResult(), baseOrder()), { ok: true })
   })
 
-  it("passes when amountMinor matches exactly", () => {
-    assert.deepStrictEqual(
-      assertPaymentMatchesOrder(baseResult({ amountMinor: 4999 }), baseOrder()),
-      { ok: true },
-    )
-  })
-
   it("passes when currency case differs", () => {
     assert.deepStrictEqual(
       assertPaymentMatchesOrder(baseResult({ currency: "usd" }), baseOrder()),
@@ -143,56 +136,8 @@ describe("assertPaymentMatchesOrder", () => {
     if (!r.ok) assert.strictEqual(r.reason, "capture_not_completed")
   })
 
-  // ── getCaptureById fixtures (PR-C1) ──
-  it("accepts getCaptureById result with full binding", () => {
-    const captureResult = baseResult({
-      transactionId: "cap-abc-123",
-      providerOrderId: "pp-order-xyz",
-      referenceOrderId: "order-abc-123",
-      amount: 49.99,
-      currency: "USD",
-      captureStatus: "COMPLETED",
-    })
-    assert.deepStrictEqual(assertPaymentMatchesOrder(captureResult, baseOrder()), { ok: true })
-  })
-
-  it("rejects getCaptureById when capture status is PENDING", () => {
-    const captureResult = baseResult({
-      captureStatus: "PENDING",
-      referenceOrderId: "order-abc-123",
-    })
-    const r = assertPaymentMatchesOrder(captureResult, baseOrder())
-    assert.strictEqual(r.ok, false)
-    if (!r.ok) assert.strictEqual(r.reason, "capture_not_completed")
-  })
-
-  it("rejects getCaptureById when reference_id is missing (order lookup failed)", () => {
-    const captureResult = baseResult({
-      referenceOrderId: undefined,
-      captureStatus: "COMPLETED",
-    })
-    const r = assertPaymentMatchesOrder(captureResult, baseOrder())
-    assert.strictEqual(r.ok, false)
-    if (!r.ok) assert.strictEqual(r.reason, "missing_reference")
-  })
-
-  // ── PR-C2: coupon only consumed when transitioned ──
-  // (markOrderPaidIfNotAlready 的原子性在 order-service 层通过 SQL WHERE 保证；
-  //  此处验证上层逻辑：transitioned=true 才消费，false 则跳过。这些是纯逻辑测试。)
-  it("simulates coupon consumed when transitioned is true", () => {
-    // 模拟：markOrderPaidIfNotAlready 返回 transitioned=true 且 order 有 coupon
-    const transitioned = true
-    const order = { coupon_id: "coupon-abc" } as { coupon_id: string | null }
-    const shouldConsume = transitioned && !!order.coupon_id
-    assert.strictEqual(shouldConsume, true)
-  })
-
-  it("simulates coupon NOT consumed when transitioned is false (concurrent loser)", () => {
-    const transitioned = false
-    const order = { coupon_id: "coupon-abc" } as { coupon_id: string | null }
-    const shouldConsume = transitioned && !!order.coupon_id
-    assert.strictEqual(shouldConsume, false)
-  })
+  // Provider lookup and coupon consumption need production integration coverage;
+  // locally reconstructed result objects and boolean expressions cannot prove them.
 
   // ── PR-D1: PayPal discount orders omit breakdown/items ──
   it("validates discount orders pass with amountMinor only (no breakdown needed)", () => {

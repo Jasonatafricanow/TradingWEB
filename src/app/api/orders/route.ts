@@ -5,6 +5,8 @@ import { NextResponse } from "next/server";
 import { requireUser, errorResponse } from "@/services/auth/auth-middleware";
 import { listUserOrders, createOrder } from "@/services/orders/order-service";
 import { db } from "@/lib/db";
+import { API_MESSAGES } from "@/lib/api-messages";
+import { WalletInsufficientError } from "@/services/promotions/money-rules";
 
 export async function GET(request: Request) {
   try {
@@ -96,15 +98,20 @@ export async function POST(request: Request) {
       shipping_cost: body.shipping_cost,
       delivery_date: body.delivery_date,
       delivery_time_slot: body.delivery_time_slot,
+      use_wallet: body.useWallet === true,
+      affiliate_code: typeof body.affiliateCode === "string" ? body.affiliateCode : undefined,
     };
     const requestKey = request.headers.get("Idempotency-Key");
-    if (requestKey && !/^[a-zA-Z0-9_-]{8,100}$/.test(requestKey)) return NextResponse.json({ error: "Invalid idempotency key" }, { status: 400 });
+    if (requestKey && !/^[a-zA-Z0-9_-]{8,100}$/.test(requestKey)) return NextResponse.json({ error: API_MESSAGES.invalidIdempotencyKey }, { status: 400 });
     const result = requestKey ? await runIdempotent({
       key: `web:${createHash("sha256").update(`${user.id}:${requestKey}`).digest("hex")}`,
       operation: "web_checkout", storeId: null, requestHash: hashPosRequest(input),
     }, () => createOrder(input), { resourceType: "order", resourceId: result => result.id }) : await createOrder(input);
     return NextResponse.json(result);
   } catch (err) {
+    if (err instanceof WalletInsufficientError) {
+      return NextResponse.json({ error: API_MESSAGES.walletUnavailable, code: "WALLET_INSUFFICIENT" }, { status: 409 });
+    }
     return errorResponse(err);
   }
 }

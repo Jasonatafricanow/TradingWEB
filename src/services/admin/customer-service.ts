@@ -64,6 +64,14 @@ export async function listCustomers(options?: {
         searchParams,
       );
       const total = Number((countRows as Array<{ total: number | string }>)[0]?.total ?? 0);
+      // Totals across every matching customer, not just the visible page.
+      const [summaryRows] = await db.$client.execute(
+        `SELECT COUNT(o.id) AS orders, COALESCE(SUM(o.total_amount), 0) AS revenue
+         FROM orders o JOIN users u ON u.id = o.user_id WHERE 1=1${searchClause}`,
+        searchParams,
+      );
+      const summaryRow = (summaryRows as Array<{ orders: number | string; revenue: number | string }>)[0];
+      const summary = { orders: Number(summaryRow?.orders ?? 0), revenue: Number(summaryRow?.revenue ?? 0) };
 
       const [rows] = await db.$client.execute(
         `SELECT u.id as user_id, u.email, u.name, u.created_at,
@@ -86,7 +94,7 @@ export async function listCustomers(options?: {
           createdAt: row.created_at as string | null,
         }),
       }));
-      return { data, total, error: null };
+      return { data, total, summary, error: null };
     } catch {
       const orderSearchClause = search
         ? ` AND (MAX(buyer_email) LIKE ? OR MAX(buyer_name) LIKE ? OR user_id LIKE ?)`

@@ -14,6 +14,8 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
+import { useI18n } from "@/contexts/i18n-context";
+import { translate } from "@/i18n";
 import { PageHeader } from "../_components";
 import { MagnifyingGlass, Minus, Plus, Printer, Storefront, Trash } from "@phosphor-icons/react";
 
@@ -53,6 +55,7 @@ function lineKey(item: { product_id: string; variant_id: string | null }) {
 }
 
 export default function PosPage() {
+  const { t, locale } = useI18n();
   const [operatorId, setOperatorId] = useState("");
   const [pin, setPin] = useState("");
   const [operatorToken, setOperatorToken] = useState("");
@@ -123,23 +126,23 @@ export default function PosPage() {
       const session = await apiData("/api/admin/pos/operator-sessions", { staff_id: operatorId.trim(), store_id: storeId, device_id: deviceId, pin });
       setOperatorId(session.operator.staffId); setOperatorToken(session.token);
       const shift = await apiData("/api/admin/pos/shifts/current", undefined, session.token);
-      setShiftId(shift?.id || null); toast.success("操作员已验证");
-    } catch (error) { toast.error(error instanceof Error ? error.message : "登录失败"); }
+      setShiftId(shift?.id || null); toast.success(t("pos.operator_verified"));
+    } catch (error) { toast.error(error instanceof Error ? error.message : t("pos.login_failed")); }
     finally { setPin(""); setSessionBusy(false); }
   };
   const changeShift = async () => {
     if (sessionBusy) return;
-    if (!/^\d+(\.\d{1,2})?$/.test(cashCount)) { toast.error("请输入有效现金金额"); return; }
+    if (!/^\d+(\.\d{1,2})?$/.test(cashCount)) { toast.error(t("pos.invalid_cash")); return; }
     setSessionBusy(true);
     try {
       if (shiftId) {
         const closed = await apiData(`/api/admin/pos/shifts/${shiftId}/close`, { counted_cash: Number(cashCount).toFixed(2), idempotency_key: `web-close-${shiftId}` });
-        toast.success(`已交班，现金差额 ${closed.difference_cash}`); setShiftId(null);
+        toast.success(translate(locale, "pos.shift_closed", { difference: closed.difference_cash })); setShiftId(null);
       } else {
         const opened = await apiData("/api/admin/pos/shifts", { opening_float: Number(cashCount).toFixed(2) });
-        setShiftId(opened.id); toast.success("已开班");
+        setShiftId(opened.id); toast.success(t("pos.shift_opened"));
       }
-    } catch (error) { toast.error(error instanceof Error ? error.message : "班次操作失败"); }
+    } catch (error) { toast.error(error instanceof Error ? error.message : t("pos.shift_failed")); }
     finally { setSessionBusy(false); }
   };
 
@@ -210,8 +213,8 @@ export default function PosPage() {
   };
   const doCheckout = async () => {
     if (checkingOut) return;
-    if (!operatorToken || !bootstrap || !shiftId) { toast.error("请先验证操作员并开班"); return; }
-    if (!cart.length || total <= 0 || discountNum > subtotal) { toast.error("请核对商品和应付金额"); return; }
+    if (!operatorToken || !bootstrap || !shiftId) { toast.error(t("pos.verify_and_open_first")); return; }
+    if (!cart.length || total <= 0 || discountNum > subtotal) { toast.error(t("pos.check_cart_total")); return; }
     setCheckingOut(true);
     try {
       const payload = { store_id: storeId, staff_id: operatorId, customer_id: null, currency: bootstrap.currency, note: null,
@@ -234,7 +237,7 @@ export default function PosPage() {
       const manager = await apiData("/api/admin/pos/operator-sessions", { staff_id: managerId.trim(), store_id: storeId, device_id: deviceId, pin: managerPin });
       const approval = await apiData("/api/admin/pos/approvals", { store_id: storeId, operation: "checkout_discount", resource_hash: approvalHash }, manager.token);
       await submitCheckout({ ...pendingRequest.current, approval_token: approval.token });
-    } catch (error) { toast.error(error instanceof Error ? error.message : "审批失败"); }
+    } catch (error) { toast.error(error instanceof Error ? error.message : t("pos.approval_failed")); }
     finally { setManagerPin(""); setCheckingOut(false); }
   };
 
@@ -325,21 +328,21 @@ export default function PosPage() {
 
       <Card className="mb-4"><CardContent className="pt-4 space-y-3">
         {!operatorToken ? <div className="flex gap-2">
-          <Input placeholder="操作员员工 ID" value={operatorId} onChange={e => setOperatorId(e.target.value)} />
-          <Input placeholder="操作员 PIN" type="password" value={pin} onChange={e => setPin(e.target.value)} autoComplete="off" />
-          <Button disabled={!storeId || !bootstrap || sessionBusy} onClick={startOperator}>验证操作员</Button>
+          <Input placeholder={t("pos.operator_staff_id")} value={operatorId} onChange={e => setOperatorId(e.target.value)} />
+          <Input placeholder={t("pos.operator_pin")} type="password" value={pin} onChange={e => setPin(e.target.value)} autoComplete="off" />
+          <Button disabled={!storeId || !bootstrap || sessionBusy} onClick={startOperator}>{t("pos.verify_operator")}</Button>
         </div> : <div className="flex items-center gap-2">
-          <span className="text-sm">操作员 {operatorId} · {shiftId ? "已开班" : "未开班"}</span>
-          <Input className="w-40" aria-label={shiftId ? "交班实点现金" : "开班备用金"} value={cashCount} onChange={e => setCashCount(e.target.value)} />
-          <Button disabled={sessionBusy || checkingOut} onClick={changeShift}>{shiftId ? "确认交班" : "开班"}</Button>
-          <Button variant="outline" onClick={() => setOperatorToken("")}>切换操作员</Button>
+          <span className="text-sm">{t("pos.operator_label")} {operatorId} · {shiftId ? t("pos.shift_status_open") : t("pos.shift_status_closed")}</span>
+          <Input className="w-40" aria-label={shiftId ? t("pos.closing_cash") : t("pos.opening_float")} value={cashCount} onChange={e => setCashCount(e.target.value)} />
+          <Button disabled={sessionBusy || checkingOut} onClick={changeShift}>{shiftId ? t("pos.close_shift") : t("pos.open_shift")}</Button>
+          <Button variant="outline" onClick={() => setOperatorToken("")}>{t("pos.switch_operator")}</Button>
         </div>}
         {approvalHash && <div className="space-y-2">
-          <p className="text-sm">该折扣需要另一位同店经理审批。</p>
-          <Input placeholder="经理员工 ID" value={managerId} onChange={e => setManagerId(e.target.value)} />
-          <Input placeholder="经理 PIN" type="password" value={managerPin} onChange={e => setManagerPin(e.target.value)} autoComplete="off" />
-          <Button disabled={checkingOut} onClick={approveDiscount}>审批并完成原交易</Button>
-          <Button variant="outline" disabled={checkingOut} onClick={() => setApprovalHash(null)}>取消审批</Button>
+          <p className="text-sm">{t("pos.discount_needs_approval")}</p>
+          <Input placeholder={t("pos.manager_staff_id")} value={managerId} onChange={e => setManagerId(e.target.value)} />
+          <Input placeholder={t("pos.manager_pin")} type="password" value={managerPin} onChange={e => setManagerPin(e.target.value)} autoComplete="off" />
+          <Button disabled={checkingOut} onClick={approveDiscount}>{t("pos.approve_and_complete")}</Button>
+          <Button variant="outline" disabled={checkingOut} onClick={() => setApprovalHash(null)}>{t("pos.cancel_approval")}</Button>
         </div>}
       </CardContent></Card>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -462,7 +465,7 @@ export default function PosPage() {
               {discountNum > 0 && (
                 <div className="flex justify-between text-gray-500"><span>折扣</span><span>-${discountNum.toFixed(2)}</span></div>
               )}
-              <div className="flex justify-between text-gray-500"><span>税费</span><span>{tax.toFixed(2)} {bootstrap?.currency}</span></div>
+              <div className="flex justify-between text-gray-500"><span>{t("pos.tax")}</span><span>{tax.toFixed(2)} {bootstrap?.currency}</span></div>
               <div className="flex justify-between font-bold text-lg"><span>应收</span><span>${total.toFixed(2)}</span></div>
             </div>
 

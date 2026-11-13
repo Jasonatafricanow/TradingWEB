@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { generateBriefing, renderBriefingHtml } from "@/services/cron/briefing-service"
 import { sendEmail } from "@/services/notifications/email-service"
+import { EMAIL_TEMPLATES } from "@/services/notifications/email-messages"
 import { SITE } from "@/config/site"
 import { isAuthorizedCronRequest } from "@/lib/cron-auth"
 
@@ -13,19 +14,31 @@ async function handleBriefing(request: NextRequest) {
     const data = await generateBriefing()
     const html = await renderBriefingHtml(data)
     const to = process.env.BRIEFING_EMAIL || SITE.email
-    const result = await sendEmail(to, `${SITE.name} Daily Briefing - ${data.date}`, html)
+    // One briefing per day and recipient, even if the scheduler fires twice.
+    const result = await sendEmail({
+      to,
+      subject: `${SITE.name} Daily Briefing - ${data.date}`,
+      body: html,
+      contentType: "html",
+      templateKey: EMAIL_TEMPLATES.dailyBriefing.key,
+      dedupeKey: `daily-briefing:${data.date}:${to.toLowerCase()}`,
+    })
 
     return NextResponse.json({
       success: true,
       date: data.date,
       summary: {
-        revenue: data.revenue || 0,
-        orders: data.newOrders || 0,
-        pv: 0,
-        lowStock: 0,
-        recovered: 0,
+        revenue: data.revenue,
+        orders: data.newOrders,
+        paidOrders: data.paidOrders,
+        // No page-view source exists yet: null means unavailable, not zero.
+        pv: data.pageViews,
+        lowStock: data.lowStock,
+        recovered: data.recoveredCarts,
       },
-      emailSent: result.success,
+      emailSent: result.status === "sent",
+      emailStatus: result.status,
+      emailDuplicate: !result.created,
     })
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error"

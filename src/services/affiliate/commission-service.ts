@@ -3,28 +3,6 @@ import { getActiveStrategy } from '@/services/affiliate/strategies';
 import { randomUUID } from 'node:crypto';
 
 export const commissionService = {
-  async calculateAndRecord(order: { id: string; total_amount: number; buyer_id: string; affiliate_code?: string }) {
-    if (!order.affiliate_code) return;
-    try {
-      const [affRows] = await db.$client.execute('SELECT * FROM affiliates WHERE code = ? LIMIT 1', [order.affiliate_code]);
-      const affiliate = (affRows as Record<string, any>[])[0];
-      if (!affiliate || affiliate.status !== 'active') return;
-      const strategy = getActiveStrategy();
-      const commission = await strategy.calculateCommission(order, affiliate as { id: string; user_id: string; rate: number });
-      if (commission <= 0) return;
-      const refId = randomUUID();
-      await db.$client.execute(
-        'INSERT INTO referrals (id, affiliate_id, order_id, commission, rate, status) VALUES (?, ?, ?, ?, ?, ?)',
-        [refId, affiliate.id, order.id, commission.toFixed(2), affiliate.rate, 'pending']
-      );
-      await db.$client.execute(
-        'UPDATE affiliates SET balance = ?, total_earned = ? WHERE id = ?',
-        [(parseFloat(affiliate.balance) + commission).toFixed(2), (parseFloat(affiliate.total_earned) + commission).toFixed(2), affiliate.id]
-      );
-    } catch (error) {
-      throw error;
-    }
-  },
   checkEligibility(affiliateId: string) {
     return getActiveStrategy().checkWithdrawEligibility(affiliateId);
   },
@@ -41,7 +19,7 @@ export const commissionService = {
       );
       const refId = randomUUID();
       await db.$client.execute(
-        'INSERT INTO referrals (id, affiliate_id, order_id, commission, rate, status) VALUES (?, ?, ?, ?, ?, ?)',
+        "INSERT INTO referrals (id, affiliate_id, order_id, commission, rate, status, kind) VALUES (?, ?, ?, ?, ?, ?, 'payout')",
         [refId, affiliateId, 'PAYOUT_' + Date.now(), result.finalAmount, 0, 'pending']
       );
       return result;
@@ -57,7 +35,7 @@ export const commissionService = {
       if (settlement.finalPayout > 0) {
         const refId = randomUUID();
         await db.$client.execute(
-          'INSERT INTO referrals (id, affiliate_id, order_id, commission, rate, status, paid_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          "INSERT INTO referrals (id, affiliate_id, order_id, commission, rate, status, paid_at, kind) VALUES (?, ?, ?, ?, ?, ?, ?, 'payout')",
           [refId, affiliateId, 'EXIT_' + Date.now(), settlement.finalPayout.toFixed(2), 0, 'paid', new Date().toISOString()]
         );
       }

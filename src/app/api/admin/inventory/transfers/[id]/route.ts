@@ -7,6 +7,7 @@ import {
   cancelTransfer,
   TransferServiceError,
 } from "@/services/admin/transfer-service"
+import { resolveStaffStoreScope } from "@/services/admin/staff-store-scope"
 
 function transferErrorResponse(error: unknown) {
   if (error instanceof TransferServiceError) {
@@ -39,7 +40,8 @@ export async function PUT(
     await requireStaffRole(request, ["admin", "manager"])
     const user = await requireUser(request)
     const { id } = await params
-    await approveTransfer(id, user.id)
+    const storeScope = await resolveStaffStoreScope(user)
+    await approveTransfer(id, user.id, undefined, storeScope ? { storeId: storeScope } : undefined)
     return NextResponse.json({ data: { id, status: "in_transit" } })
   } catch (err) { return transferErrorResponse(err) }
 }
@@ -54,6 +56,8 @@ export async function PATCH(
     const user = await requireUser(request)
     const { id } = await params
     const body = await request.json()
+    const storeScope = await resolveStaffStoreScope(user)
+    const scope = storeScope ? { storeId: storeScope } : undefined
 
     if (!body.action) {
       return NextResponse.json({ error: "Missing action field (complete/cancel)" }, { status: 400 })
@@ -61,10 +65,10 @@ export async function PATCH(
 
     switch (body.action) {
       case "complete":
-        await completeTransfer(id, user.id)
+        await completeTransfer(id, user.id, undefined, scope)
         return NextResponse.json({ data: { id, status: "completed" } })
       case "cancel":
-        await cancelTransfer(id, user.id)
+        await cancelTransfer(id, user.id, undefined, scope)
         return NextResponse.json({ data: { id, status: "cancelled" } })
       default:
         return NextResponse.json({ error: `Unknown action: ${body.action}` }, { status: 400 })

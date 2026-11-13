@@ -25,16 +25,25 @@ function ensureMockSeeded() {
   }
 }
 
-export async function logAction(params: {
-  userId?: string
+export interface AuditEntry {
+  userId?: string | null
   action: string
   entityType?: string
   entityId?: string
   details?: unknown
-  ipAddress?: string
-}) {
+  ipAddress?: string | null
+}
+
+type DbTx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/**
+ * Writes an audit row. Pass the business transaction so the audit commits
+ * (or rolls back) with the change it describes; a failure then fails the
+ * change, which is intended for financial and permission actions.
+ */
+export async function logAction(params: AuditEntry, executor: typeof db | DbTx = db) {
   const id = randomUUID();
-  await db.insert(auditLogs).values({
+  await executor.insert(auditLogs).values({
     id,
     user_id: params.userId || null,
     action: params.action,
@@ -43,6 +52,15 @@ export async function logAction(params: {
     details: params.details || null,
     ip_address: params.ipAddress || null,
   });
+}
+
+/** For actions already committed elsewhere: never turns a done change into an error. */
+export async function logActionSafely(params: AuditEntry) {
+  try {
+    await logAction(params);
+  } catch (error) {
+    console.error('[audit] failed to record', params.action, error);
+  }
 }
 
 export async function listAuditLogs(opts?: {

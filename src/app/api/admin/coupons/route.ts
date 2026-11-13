@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { requireUser, requireStaffRole, errorResponse } from "@/services/auth/auth-middleware"
 import { listCoupons, createCoupon, updateCoupon, deleteCoupon } from "@/services/admin/coupon-service"
+import { logActionSafely } from "@/services/admin/audit-service"
 
 // GET /api/admin/coupons?page=&pageSize=&search=&isActive=
 export async function GET(request: NextRequest) {
@@ -33,6 +34,12 @@ export async function POST(request: NextRequest) {
     }
 
     const data = await createCoupon({ code, type, value, min_order_amount, max_discount, usage_limit, expires_at, description })
+    const actor = await requireUser(request)
+    await logActionSafely({
+      userId: actor.id, action: "coupon.create", entityType: "coupon",
+      entityId: (data as { id?: string } | null)?.id,
+      details: { code, type, value, usage_limit: usage_limit ?? null, expires_at: expires_at ?? null },
+    })
     return NextResponse.json({ data })
   } catch (err) {
     if (err instanceof Error && (err as Error).message.includes("已存在")) {
@@ -51,6 +58,8 @@ export async function PUT(request: NextRequest) {
     if (!id) return NextResponse.json({ error: "id is required" }, { status: 400 })
 
     const data = await updateCoupon(id, updates)
+    const actor = await requireUser(request)
+    await logActionSafely({ userId: actor.id, action: "coupon.update", entityType: "coupon", entityId: id, details: { changes: updates } })
     return NextResponse.json({ data })
   } catch (err) {
     return errorResponse(err)
@@ -64,6 +73,8 @@ export async function DELETE(request: NextRequest) {
     const { id } = await request.json() as { id?: string }
     if (!id) return NextResponse.json({ error: "id is required" }, { status: 400 })
     await deleteCoupon(id)
+    const actor = await requireUser(request)
+    await logActionSafely({ userId: actor.id, action: "coupon.delete", entityType: "coupon", entityId: id })
     return NextResponse.json({ success: true })
   } catch (err) {
     return errorResponse(err)

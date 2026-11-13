@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 import { requireUser, requireStaffRole, errorResponse } from "@/services/auth/auth-middleware"
 import { listStaff } from "@/services/admin/staff-service"
+import { grantedSections } from "@/lib/admin-sections"
+import { loadManagerGrant } from "@/services/admin/role-permissions-service"
 
 /**
  * GET /api/admin/staff/me
@@ -13,8 +15,10 @@ export async function GET(request: Request) {
     const result = await listStaff();
     const staffList = result.data || [];
     const me = staffList.find((staffMember: Record<string, unknown>) => staffMember.email === user.email);
+    // Managers see exactly the sections an admin granted (role-permissions).
+    const sections = user.role === 'manager' ? grantedSections(await loadManagerGrant()) : undefined;
     return NextResponse.json({
-      data: me || { id: user.staffId, email: user.email, role: user.role, name: user.email.split('@')[0] },
+      data: { ...(me || { id: user.staffId, email: user.email, role: user.role, name: user.email.split('@')[0] }), sections },
     });
   } catch (err) {
     return errorResponse(err);

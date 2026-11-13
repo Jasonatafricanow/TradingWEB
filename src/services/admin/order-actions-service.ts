@@ -1,5 +1,5 @@
 import { db } from '@/lib/db';
-import { eq, desc } from 'drizzle-orm';
+import { and, eq, desc, ne } from 'drizzle-orm';
 import { orders, shipments } from '@/storage/database/shared/schema';
 import { randomUUID } from 'node:crypto';
 import { markOrderPaidIfNotAlready } from '@/services/orders/order-service';
@@ -7,6 +7,9 @@ import { restoreInventoryForOrder } from '@/services/orders/order-stock-service'
 import { addOrderTimeline } from '@/services/orders/order-timeline';
 import { createRefund } from './refund-service';
 import { logAction } from './audit-service';
+import { recordDeliveryFailedEvent, sendCustomerOrderEmail } from '@/services/notifications/order-notification-service';
+import { restoreWalletForOrder } from '@/services/promotions/wallet-service';
+import { getProgramSettings } from '@/services/promotions/program-settings';
 
 // P1-03:订单状态变更全部动作化。每个动作写 order_timeline,
 // 敏感动作(收款确认/取消/退款)另写 audit_logs。前端不允许随意 PATCH 字段。
@@ -18,6 +21,10 @@ export class OrderActionError extends Error {
 }
 
 type Operator = { id: string };
+
+function changedRows(result: unknown): number {
+  return Number((result as unknown as [{ affectedRows?: number }])[0]?.affectedRows ?? 0);
+}
 
 async function getOrderRow(orderId: string) {
   const [order] = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
@@ -75,12 +82,23 @@ export async function cancelAction(orderId: string, operator: Operator, reason?:
     throw new OrderActionError('已发货订单不能直接取消,请走退款流程', 409);
   }
 
-  await db.update(orders).set({ status: 'cancelled', updated_at: new Date() }).where(eq(orders.id, orderId));
+  const cancelled = await db.update(orders).set({ status: 'cancelled', updated_at: new Date() })
+    .where(and(eq(orders.id, orderId), ne(orders.status, 'cancelled'), ne(orders.fulfillment_status, 'fulfilled')));
+  if (changedRows(cancelled) < 1) return { order: await getOrderRow(orderId), changed: false };
 
   try {
     await restoreInventoryForOrder(orderId, { operatorId: operator.id, reason: '订单取消回补库存' });
   } catch (e) {
     console.error('[order-actions] restore inventory failed:', e);
+  }
+
+  // An unpaid order gives its wallet share back; a paid one goes through refunds.
+  if (order.payment_status !== 'paid') {
+    const programs = await getProgramSettings();
+    await db.transaction((tx) => restoreWalletForOrder(orderId, tx, {
+      graceDays: programs.wallet.restoreGraceDays,
+      reason: `cancelled by staff ${operator.id ?? ''}`.trim(),
+    }));
   }
 
   await addOrderTimeline({
@@ -92,6 +110,7 @@ export async function cancelAction(orderId: string, operator: Operator, reason?:
     operator_id: operator.id,
   });
   await audit(operator, 'order.cancel', orderId, { order_no: order.order_no, old_status: order.status, reason: reason || null });
+  await sendCustomerOrderEmail(order, 'cancelled');
 
   return { order: await getOrderRow(orderId), changed: true };
 }
@@ -107,7 +126,9 @@ export async function fulfillAction(
   if (order.status === 'cancelled') throw new OrderActionError('已取消订单不能发货', 409);
   if (order.fulfillment_status === 'fulfilled') return { order, changed: false };
 
-  await db.update(orders).set({ fulfillment_status: 'fulfilled', updated_at: new Date() }).where(eq(orders.id, orderId));
+  const fulfilled = await db.update(orders).set({ fulfillment_status: 'fulfilled', updated_at: new Date() })
+    .where(and(eq(orders.id, orderId), ne(orders.fulfillment_status, 'fulfilled'), ne(orders.status, 'cancelled')));
+  if (changedRows(fulfilled) < 1) return { order: await getOrderRow(orderId), changed: false };
 
   if (input.tracking_number) {
     await db.insert(shipments).values({
@@ -135,6 +156,7 @@ export async function fulfillAction(
     tracking_number: input.tracking_number || null,
     carrier: input.carrier || null,
   });
+  await sendCustomerOrderEmail(order, 'shipped', { trackingNumber: input.tracking_number, carrier: input.carrier });
 
   return { order: await getOrderRow(orderId), changed: true };
 }
@@ -168,12 +190,7 @@ export async function createRefundAction(
     new_value: amount.toFixed(2),
     operator_id: operator.id,
   });
-  await audit(operator, 'order.create_refund', orderId, {
-    order_no: order.order_no,
-    amount: amount.toFixed(2),
-    reason: input.reason.trim(),
-  });
-
+  // refund.create is audited inside the refund transaction (refund-service).
   return refund;
 }
 
@@ -241,6 +258,12 @@ export async function updateTrackingAction(
     new_value: trackingNumber,
     operator_id: operator.id,
   });
+  await audit(operator, 'order.update_tracking', orderId, {
+    order_no: order.order_no,
+    old_tracking_number: latest?.tracking_number ?? null,
+    tracking_number: trackingNumber,
+    carrier: input.carrier ?? latest?.carrier ?? null,
+  });
 
   return { ok: true, tracking_number: trackingNumber };
 }
@@ -252,11 +275,14 @@ export async function markDeliveringAction(orderId: string, operator: Operator) 
   if (order.status === 'delivering') return { order, changed: false };
   if (order.status === 'cancelled') throw new OrderActionError('已取消订单不能配送', 409);
 
-  await db.update(orders).set({ status: 'delivering', updated_at: new Date() }).where(eq(orders.id, orderId));
+  const moved = await db.update(orders).set({ status: 'delivering', updated_at: new Date() })
+    .where(and(eq(orders.id, orderId), ne(orders.status, 'delivering'), ne(orders.status, 'cancelled')));
+  if (changedRows(moved) < 1) return { order: await getOrderRow(orderId), changed: false };
   await addOrderTimeline({
     order_id: orderId, action: 'delivery', description: '开始配送',
     old_value: order.status, new_value: 'delivering', operator_id: operator.id,
   });
+  await audit(operator, 'order.mark_delivering', orderId, { order_no: order.order_no, old_status: order.status });
   return { order: await getOrderRow(orderId), changed: true };
 }
 
@@ -266,13 +292,17 @@ export async function markDeliveredAction(orderId: string, operator: Operator) {
   if (!order) throw new OrderActionError('Order not found', 404);
   if (order.status === 'delivered') return { order, changed: false };
 
-  await db.update(orders).set({
+  if (order.status === 'cancelled') throw new OrderActionError('已取消订单不能标记送达', 409);
+  const moved = await db.update(orders).set({
     status: 'delivered', fulfillment_status: 'fulfilled', updated_at: new Date(),
-  }).where(eq(orders.id, orderId));
+  }).where(and(eq(orders.id, orderId), ne(orders.status, 'delivered'), ne(orders.status, 'cancelled')));
+  if (changedRows(moved) < 1) return { order: await getOrderRow(orderId), changed: false };
   await addOrderTimeline({
     order_id: orderId, action: 'delivery', description: '已送达',
     old_value: order.status, new_value: 'delivered', operator_id: operator.id,
   });
+  await audit(operator, 'order.mark_delivered', orderId, { order_no: order.order_no, old_status: order.status });
+  await sendCustomerOrderEmail(order, 'delivered');
   return { order: await getOrderRow(orderId), changed: true };
 }
 
@@ -282,10 +312,14 @@ export async function markDeliveryFailedAction(orderId: string, operator: Operat
   if (!order) throw new OrderActionError('Order not found', 404);
   if (order.status === 'delivery_failed') return { order, changed: false };
 
-  await db.update(orders).set({ status: 'delivery_failed', updated_at: new Date() }).where(eq(orders.id, orderId));
+  const moved = await db.update(orders).set({ status: 'delivery_failed', updated_at: new Date() })
+    .where(and(eq(orders.id, orderId), ne(orders.status, 'delivery_failed')));
+  if (changedRows(moved) < 1) return { order: await getOrderRow(orderId), changed: false };
   await addOrderTimeline({
     order_id: orderId, action: 'delivery', description: `配送失败: ${reason || '未知原因'}`,
     old_value: order.status, new_value: 'delivery_failed', operator_id: operator.id,
   });
+  await audit(operator, 'order.mark_delivery_failed', orderId, { order_no: order.order_no, old_status: order.status, reason: reason || null });
+  await recordDeliveryFailedEvent(order, reason || null);
   return { order: await getOrderRow(orderId), changed: true };
 }

@@ -21,7 +21,7 @@ describe("Task 10 deterministic service lifecycle", () => {
       orders: new Map<string, Record<string, unknown>>(),
       items: new Map<string, Record<string, unknown>>(),
       payments: [] as Array<{ orderId: string; method: string; amount: string; status: string }>,
-      refunds: [] as Array<{ amount: string; orderPaymentMethod: string | null; isExchangeAccounting: boolean }>,
+      refunds: [] as Array<{ amount: string; orderPaymentMethod: string | null; isExchangeAccounting: boolean; hasTenders?: boolean; tenderCash?: string }>,
     };
     let id = 0;
     const nextId = () => `task10-${++id}`;
@@ -102,6 +102,12 @@ describe("Task 10 deterministic service lifecycle", () => {
       runIdempotent: async (_input: unknown, work: () => Promise<unknown>) => work(),
       transaction: async (work: (transaction: unknown) => Promise<unknown>) => work(tx),
       findOpenShiftId: vi.fn().mockResolvedValue(opened.id),
+      // The cash sale was paid by one cash tender; the refund returns through it.
+      loadTenderBasis: vi.fn().mockResolvedValue({ paid: [{ method: "cash", label: "Cash", amountCents: 2500 }], refundedByMethod: new Map(), legacyMethod: "cash" }),
+      insertRefundTenders: vi.fn(async (input: { tenders: Array<{ method: string; amount: string }> }) => {
+        const cash = input.tenders.filter((t) => t.method === "cash").reduce((sum, t) => sum + Number(t.amount), 0);
+        Object.assign(state.refunds[state.refunds.length - 1], { hasTenders: true, tenderCash: cash.toFixed(2) });
+      }),
       consumeApprovalToken: vi.fn().mockResolvedValue("manager-1"),
       lockOriginalOrder: vi.fn(async () => ({
         id: cashSale.id, storeId: "store-1", source: "pos", status: "completed", total: "25.00",

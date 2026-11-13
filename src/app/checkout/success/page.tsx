@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { clearCheckoutAttempt } from "@/lib/checkout-attempt";
+import { apiFetch } from "@/lib/client-api";
 import Link from "next/link";
 import Image from "next/image";
-import { apiFetch } from "@/lib/client-api";
 import { useAuth } from "@/contexts/auth-context";
 import { useI18n } from "@/contexts/i18n-context";
 import { useCurrency } from "@/contexts/currency-context";
@@ -53,6 +54,8 @@ export default function CheckoutSuccessPage() {
     let active = true;
     const id = new URLSearchParams(window.location.search).get("order_id");
     if (!id) { setStatus("unknown"); return; }
+    // The order exists now; a new checkout in this tab must get a new key.
+    clearCheckoutAttempt();
     if (!user) { setStatus("unknown"); return; }
     apiFetch(`/api/orders/${encodeURIComponent(id)}`)
       .then(async (response) => {

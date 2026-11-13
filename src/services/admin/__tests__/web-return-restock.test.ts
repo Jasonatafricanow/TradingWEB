@@ -8,7 +8,7 @@ function setup(restocked = false, priorQuantity = 0) {
   const reads: unknown[][] = [[refund], [{ id: "o", source: "web", store_id: null }], [refund], restocked ? [{ order_item_id: "i", quantity: 1 }] : [], [{ id: "i", product_id: "p", product_type: "physical", quantity: 2, variant_id: null, product_title: "Item" }], priorQuantity ? [{ orderItemId: "i", quantity: priorQuantity }] : []];
   const inserts = vi.fn(); const updates = vi.fn();
   const tx = {
-    select: () => { const result = reads.shift(); const q = { from: () => q, where: () => q, for: () => q, limit: () => q, groupBy: () => q, then: (resolve: Function) => Promise.resolve(resolve(result)) }; return q; },
+    select: () => { const result = reads.shift(); const q = { from: () => q, where: () => q, for: () => q, limit: () => q, groupBy: () => q, then: (resolve: (value: unknown) => unknown) => Promise.resolve(resolve(result)) }; return q; },
     insert: () => ({ values: inserts }), update: () => ({ set: (value: unknown) => { updates(value); return { where: async () => {} }; } }),
   };
   mocks.transaction.mockImplementation(work => work(tx));

@@ -6,12 +6,13 @@ import { assertPaymentMatchesOrder } from "@/services/payment/payment-validation
 
 // ── Stripe SDK (用于 constructEvent 签名验证) ──
 import Stripe from "stripe";
+import { API_MESSAGES } from "@/lib/api-messages";
 
 /**
  * Unsigned webhooks are only for local callback debugging. Public staging and
  * production environments must use provider signatures.
  */
-export function allowUnsignedWebhookDebug(requestUrl: string): boolean {
+function allowUnsignedWebhookDebug(requestUrl: string): boolean {
   if (process.env.ALLOW_UNSIGNED_WEBHOOKS !== "true") return false;
 
   try {
@@ -214,7 +215,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ received: true });
       } catch (error) {
         console.error("[webhook] Stripe refund reconciliation failed", error);
-        return NextResponse.json({ error: "Refund reconciliation pending" }, { status: 503 });
+        return NextResponse.json({ error: API_MESSAGES.refundReconciliationPending }, { status: 503 });
       }
     }
 
@@ -247,7 +248,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ received: true });
       } catch (error) {
         console.error("[webhook] Refund reconciliation failed", error);
-        return NextResponse.json({ error: "Refund reconciliation pending" }, { status: 503 });
+        return NextResponse.json({ error: API_MESSAGES.refundReconciliationPending }, { status: 503 });
       }
     }
 
@@ -261,11 +262,11 @@ export async function POST(request: NextRequest) {
           const captureId = resource.id;
           const result = await pp.getCaptureById(captureId);
           if (!result.success || !result.referenceOrderId) {
-            return NextResponse.json({ error: "PayPal capture verification unavailable" }, { status: 503 });
+            return NextResponse.json({ error: API_MESSAGES.paypalCaptureUnavailable }, { status: 503 });
           }
           const orderId = result.referenceOrderId;
           const order = await getOrder(orderId);
-          if (!order) return NextResponse.json({ error: "Order not found" }, { status: 404 });
+          if (!order) return NextResponse.json({ error: API_MESSAGES.orderNotFound }, { status: 404 });
           const check = assertPaymentMatchesOrder(result, {
             id: order.id, total_amount: order.total_amount, currency: order.currency, payment_status: order.payment_status,
           });

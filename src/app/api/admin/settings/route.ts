@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireStaffRole, errorResponse } from "@/services/auth/auth-middleware";
+import { requireStaffRole, requireUser, errorResponse } from "@/services/auth/auth-middleware";
+import { logActionSafely } from "@/services/admin/audit-service";
 import { db } from "@/lib/db";
 
 function parseSettingValue(value: string | null): unknown {
@@ -64,7 +65,9 @@ export async function GET(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     await requireStaffRole(request, ["admin"]);
+    const actor = await requireUser(request);
     const body = await request.json();
+    const changedKeys: string[] = [];
 
     const sections: Array<"site" | "security"> = ["site", "security"];
     for (const section of sections) {
@@ -78,9 +81,14 @@ export async function PUT(request: NextRequest) {
             "ON DUPLICATE KEY UPDATE `value` = VALUES(`value`)",
           [`${section}.${field}`, stored]
         );
+        changedKeys.push(`${section}.${field}`);
       }
     }
 
+    if (changedKeys.length > 0) {
+      // Keys only: security settings may hold values that should not be copied into the log.
+      await logActionSafely({ userId: actor.id, action: "settings.update", entityType: "site_settings", details: { keys: changedKeys } });
+    }
     return NextResponse.json({ success: true });
   } catch (err) {
     return errorResponse(err);

@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireStaffRole, requireUser } from "@/services/auth/auth-middleware";
 import { parsePosJson, posApiErrorResponse } from "@/services/admin/pos-api-response";
 import { createOperatorSession } from "@/services/admin/pos-operator-session-service";
+import { API_MESSAGES } from "@/lib/api-messages";
 
 export async function POST(request: NextRequest) {
   try {
@@ -16,7 +17,7 @@ export async function POST(request: NextRequest) {
     if (user.role !== "admin") {
       const [rows] = await db.$client.execute("SELECT store_id FROM staff WHERE id = ? AND is_active = TRUE LIMIT 1", [user.staffId || ""]);
       const member = (rows as Array<{ store_id: string }>)[0];
-      if (!member || member.store_id !== body.store_id) return NextResponse.json({ error: "Store access denied" }, { status: 403 });
+      if (!member || member.store_id !== body.store_id) return NextResponse.json({ error: API_MESSAGES.storeAccessDenied }, { status: 403 });
     }
     const data = await createOperatorSession({
       accountUserId: user.id,

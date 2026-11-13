@@ -11,15 +11,15 @@ export async function GET(request: NextRequest) {
   try {
     await requireStaffRole(request, ["admin", "operator", "support"]);
     const params = request.nextUrl.searchParams;
-    const page = Number(params.get("page")) || 1;
-    const pageSize = Number(params.get("pageSize")) || 50;
+    const page = Math.max(1, Math.trunc(Number(params.get("page")) || 1));
+    const pageSize = Math.min(200, Math.max(1, Math.trunc(Number(params.get("pageSize")) || 50)));
     const search = params.get("search")?.trim();
     const result = await listCustomers({
       limit: pageSize,
       offset: (page - 1) * pageSize,
       search: search || undefined,
     })
-    return NextResponse.json(result)
+    return NextResponse.json({ ...result, page, pageSize })
   } catch (err) { return errorResponse(err) }
 }
 

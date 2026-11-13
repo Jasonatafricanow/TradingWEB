@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import { db } from "@/lib/db";
 import { productImages, products } from "@/storage/database/shared/schema";
 import { requireStaffRole, errorResponse } from "@/services/auth/auth-middleware";
+import { API_MESSAGES } from "@/lib/api-messages";
 
 interface ProductImageInput {
   id?: string | null;
@@ -58,7 +59,7 @@ export async function PUT(
     const images = Array.isArray(body.images) ? (body.images as ProductImageInput[]) : [];
 
     if (images.some(image => !isAllowedImageUrl(image.src, true) || (image.original_url && !isAllowedImageUrl(image.original_url, true)))) {
-      return NextResponse.json({ error: "Invalid image URL" }, { status: 400 });
+      return NextResponse.json({ error: API_MESSAGES.invalidImageUrl }, { status: 400 });
     }
     const data = await db.transaction(async (tx) => {
       const [product] = await tx.select({ id: products.id }).from(products).where(eq(products.id, id)).limit(1);

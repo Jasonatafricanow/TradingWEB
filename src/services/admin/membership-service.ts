@@ -5,12 +5,6 @@ import { sql } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import { IS_DEMO_MODE } from '@/config/constants';
 
-interface WalletInfo {
-  balance: number;
-  currency: string;
-  updated_at: string;
-}
-
 interface AvailableCoupon {
   id: string;
   code: string;
@@ -29,6 +23,8 @@ export interface TierInfo {
   badge_color?: string
   benefits?: string
   is_active: boolean
+  discount_starts_at?: Date | null
+  discount_ends_at?: Date | null
 }
 
 export interface UserMembership {
@@ -64,6 +60,8 @@ export async function updateTier(id: string, input: Partial<TierInfo>) {
     if (input.badge_color !== undefined) updateData.badge_color = input.badge_color;
     if (input.benefits !== undefined) updateData.benefits = input.benefits;
     if (input.is_active !== undefined) updateData.is_active = input.is_active;
+    if (input.discount_starts_at !== undefined) updateData.discount_starts_at = input.discount_starts_at;
+    if (input.discount_ends_at !== undefined) updateData.discount_ends_at = input.discount_ends_at;
 
     await db.update(membershipTiers).set(updateData).where(eq(membershipTiers.id, id));
     const [data] = await db.select().from(membershipTiers).where(eq(membershipTiers.id, id)).limit(1);
@@ -169,36 +167,7 @@ export async function getUserDiscountPercent(userId: string): Promise<number> {
   return tier ? parseFloat(tier.discount_percent || '0') : 0;
 }
 
-// ==================== 钱包余额 ====================
-
-/** 模拟钱包数据（按用户ID存在内存） */
-const WALLET_STORE = new Map<string, { balance: number; currency: string; updated_at: string }>();
-
-export async function getUserWallet(userId: string): Promise<WalletInfo | null> {
-  if (IS_DEMO_MODE) {
-    const existing = WALLET_STORE.get(userId);
-    if (existing) return existing;
-    const wallet = { balance: 250.00, currency: 'USD', updated_at: new Date().toISOString() };
-    WALLET_STORE.set(userId, wallet);
-    return wallet;
-  }
-  // 生产环境暂不开放钱包功能（CHANGELOG_BACKLOG.md → "用户钱包"）。
-  // 返回一个稳定的零余额对象，避免前端把 null 渲染成 "undefined"。
-  return { balance: 0, currency: 'USD', updated_at: new Date(0).toISOString() };
-}
-
-export async function addToWallet(userId: string, amount: number): Promise<WalletInfo> {
-  const wallet = await getUserWallet(userId);
-  const newBalance = (wallet?.balance || 0) + amount;
-  const updated = { balance: newBalance, currency: 'USD', updated_at: new Date().toISOString() };
-
-  if (IS_DEMO_MODE) {
-    WALLET_STORE.set(userId, updated);
-  }
-  // TODO: persist to DB in production
-
-  return updated;
-}
+// Wallet: see src/services/promotions/wallet-service.ts (credit lots with expiry).
 
 // ==================== 可用优惠券 ====================
 

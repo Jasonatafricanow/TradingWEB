@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireUser, errorResponse } from "@/services/auth/auth-middleware";
-import { getOrder, updateOrder } from "@/services/orders/order-service";
+import { cancelUnpaidOrder, getOrder } from "@/services/orders/order-service";
 
 // GET /api/orders/[id] — 获取订单详情
 export async function GET(
@@ -49,7 +49,8 @@ export async function PATCH(
       return NextResponse.json({ error: "Only pending orders can be cancelled" }, { status: 409 });
     }
 
-    const data = await updateOrder(id, { status: "cancelled" });
+    await cancelUnpaidOrder(id, "cancelled by customer");
+    const data = await getOrder(id);
     return NextResponse.json({ data });
   } catch (err) {
     return errorResponse(err);

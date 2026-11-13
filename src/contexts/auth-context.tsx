@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
+import { useI18n } from "@/contexts/i18n-context";
 import { isSessionRejected } from "@/lib/session-check";
 
 interface LocalUser {
@@ -46,6 +47,7 @@ export function clearStoredToken() {
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const { t } = useI18n();
   const [user, setUser] = useState<LocalUser | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -122,13 +124,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const response = await fetch("/api/auth/logout", { method: "POST", headers: { Authorization: `Bearer ${token}` } });
         if (!response.ok) throw new Error("logout rejected");
       } catch {
-        toast.error("Sign out failed. Please retry.");
-        return;
+        // Revocation failed server-side, but this device must still sign out.
+        toast.warning(t("auth.signout_local_only"));
       }
     }
     clearStoredToken()
     setUser(null)
-  }, [])
+  }, [t])
 
   const getToken = useCallback(() => {
     return getStoredToken()

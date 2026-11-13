@@ -16,6 +16,7 @@
         "migration:reconcile": "tsx scripts/migration-reconciliation/cli.ts",
         "test:migration-reconciliation:integration": "tsx scripts/migration-reconciliation/integration/run.ts",
         "test:migration-reconciliation:replay-full": "tsx scripts/migration-reconciliation/integration/run.ts replay-full",
+        "test:migration-replay-latest": "tsx scripts/migration-reconciliation/integration/replay-latest.ts",
         "ts-check": "tsc -p tsconfig.json",
         "version:info": "node scripts/write-build-info.mjs",
         "test": "vitest run",

@@ -4,6 +4,7 @@ import { db } from '@/lib/db'
 import { eq, and } from 'drizzle-orm'
 import { orders, refunds } from '@/storage/database/shared/schema'
 import { randomUUID } from 'node:crypto'
+import { recordRefundRequestedEvent } from '@/services/notifications/order-notification-service'
 
 // POST /api/refunds — 用户提交退款申请
 export async function POST(request: NextRequest) {
@@ -52,6 +53,7 @@ export async function POST(request: NextRequest) {
 
     // 标记订单有退款
     await db.update(orders).set({ has_refund: true }).where(eq(orders.id, order_id));
+    await recordRefundRequestedEvent(order, { id, amount: String(order.total_amount) }, db);
 
     return NextResponse.json({ data })
   } catch (err) {

@@ -161,13 +161,47 @@ CRON_SECRET="<与 .env 一致的密钥>"
 ```
 
 ### 3.2 每日运营简报（/api/cron/daily-briefing）
-每天 08:00 执行，推送昨日订单/收入/异常摘要。
+每天 08:00 执行，推送昨日订单/收入/异常摘要。同一天同一收件人只发一封，调度器重复触发不会重发。
 
 ```bash
 0 8 * * * curl -s -X POST -H "x-cron-secret: $CRON_SECRET" "https://fjglobal.online/api/cron/daily-briefing"
 ```
 
+### 3.3 邮件发件箱重试（/api/cron/email-outbox）
+每 5 分钟执行。重试状态为 `queued` 的邮件（支付商限流/5xx、网络失败、付款提交后进程中断），以及卡在 `sending` 超过 10 分钟的邮件。
+每行邮件用自己的 ID 作为 Resend 幂等键，重试不会产生第二封；只处理 23 小时内的记录（幂等键有效期 24 小时）。
+
+```bash
+*/5 * * * * curl -s -X POST -H "x-cron-secret: $CRON_SECRET" "https://fjglobal.online/api/cron/email-outbox"
+```
+
+邮件状态含义：`queued` 待发送，`sending` 发送中，`sent` 支付商已接收（不代表收件人已收到），`failed` 未配置/被拒/重试耗尽。
+需要 `RESEND_API_KEY` 和 `EMAIL_FROM`；未配置时邮件记为 `failed: provider_not_configured`，不会显示为已发送。
+
+### 3.4 推广佣金到期入账（/api/cron/affiliate-commissions）
+每小时执行。佣金在订单付款时记为 `pending`，过了冻结期（后台「会员与推广规则」里的天数）才计入推广者余额；每笔只入账一次，重复执行无副作用。
+冻结期设为 0 时付款即入账，不依赖这个任务。
+
+```bash
+0 * * * * curl -s -X POST -H "x-cron-secret: $CRON_SECRET" "https://fjglobal.online/api/cron/affiliate-commissions"
+```
+
 ---
+
+## □ 3b. Nginx 限流
+
+```bash
+# 服务器上，以 root 运行（直接连源站）
+sh scripts/rate-limit-nginx.sh
+# 前面有 CDN / 反向代理时，必须给出可信代理网段，否则所有访客共用代理 IP 的同一个限流桶
+TRUSTED_PROXY_CIDRS="<代理网段，空格分隔>" REAL_IP_HEADER=CF-Connecting-IP sh scripts/rate-limit-nginx.sh
+```
+
+- 配置在 `deploy/nginx/`：限流区装到 `conf.d/`，限流 location 和代理设置装到 `snippets/`，站点配置里只插入一行 include（插在第一个 `location /` 之前，原文件备份为 `.bak-ratelimit`）。
+- 限额：`/api/auth/*` 10 次/分（突发 5），`/api/payment/create` 与 `/api/orders` 20 次/分（突发 10），其他 `/api/*` 60 次/分（突发 40），超出返回 429；支付回调 `/api/payment/webhook`、`/api/payment/callback` 和前台页面不限流。
+- nginx 会把 `X-Forwarded-For` 覆盖为真实客户端 IP，所以应用 `.env` 可以设 `TRUST_PROXY_HEADERS=true`，让应用内按 IP 的限流生效。
+- 旧版脚本把限流区写进了一行注释，实际从未生效；新脚本会清掉那行和引用不存在的 `zone=api` 的行，可以重复运行。
+- 已在本地 nginx 1.28 上用真实请求验证上述行为；线上需要在执行后再用 `curl` 抽查一次 429。
 
 ## □ 4. 首次启动准备
 
@@ -249,3 +283,31 @@ NEXT_PUBLIC_SITE_URL=https://example.com
 - `0003_create_users_table.sql` 幂等，仅在 `profiles` 表存在时回填
 - `0004_add_seo_meta_fields.sql` 逐列检查再 add
 - 执行后核对 Drizzle migration metadata 与 MySQL 实际 schema 一致
+
+### 0034–0040 必须先于代码上线
+
+以下表和列被新代码在主链路上直接读写，代码先上线会导致对应功能整体失败：
+
+| 迁移 | 表 | 代码缺表时的后果 |
+|---|---|---|
+| `0034_oauth_identities` | `oauth_identities` | Google / Apple 登录全部失败 |
+| `0035_order_stock_allocations` | `order_stock_allocations` | 结账扣库存、退货回补失败 |
+| `0036_revoked_sessions` | `revoked_sessions` | 每个带登录态的请求都查此表，缺表时全站鉴权 500 |
+| `0037_email_outbox_notification_dedupe` | `email_logs` 新增 body/dedupe_key 等列，`notifications.dedupe_key` | 邮件写日志失败；付款事务里的通知和确认邮件被跳过（付款本身不受影响，只记错误日志） |
+| `0038_pos_refund_tenders` | `pos_refund_tenders` | POS 退款、换货写退款方式失败（整笔回滚）；交班对账查询失败 |
+| `0039_relax_legacy_stock_transfer_columns` | `stock_transfers.product_id/quantity` 改为可空 | 严格模式下新建调拨一律失败（不跑也是现状：线上如能建调拨，说明这两列已可空，0039 会自动跳过） |
+| `0040_member_wallet_commission` | `orders` 新增会员折扣/钱包/推广人列，`wallet_credits`、`wallet_transactions`，等级/推广者有效期列，`referrals` 新增 kind/dedupe_key 等 | 下单写订单失败（全站结账不可用）；付款事务失败 |
+
+发布顺序：先在线上 `SHOW TABLES` 确认前三张表不存在，`DESC email_logs` / `DESC notifications` 看现有列 → 执行迁移 → 再发布代码。
+上线前先在一次性库上全量重放（本地已用 MySQL 8.4 跑通 0000→0040，0040 重复执行无报错）：
+
+```bash
+MIGRATION_RECONCILIATION_ALLOW_DISPOSABLE_DB=1 DB_NAME=tw_replay_check DB_HOST=… DB_USER=… DB_PASSWORD=… \
+  pnpm tsx scripts/migration-reconciliation/integration/replay-latest.ts
+```
+
+0040 上线后三项功能（会员折扣、钱包、推广佣金）默认全部关闭，价格不变；由管理员在后台「会员与推广规则」逐项开启。
+0040 会把 `referrals` 里已有的提现/退出记录（`PAYOUT_`/`EXIT_` 开头）标为 `kind = 'payout'`，佣金查询不再把它们算进去。
+
+0037、0039、0040 每一步都先查 information_schema，已满足就跳过；如果线上 `email_logs` 用的不是 `to_email` 列（例如历史上手工建成 `recipient`），先停下核对，不要直接跑。
+`0008` 的 journal 断档与这三项无关，仍按「需线上 DESC 确认」处理，不要顺带补跑。
