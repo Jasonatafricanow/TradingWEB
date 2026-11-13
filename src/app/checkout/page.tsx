@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { checkoutIdempotencyKey } from "@/lib/checkout-attempt";
 import { combineDiscounts, walletShareCents } from "@/services/promotions/money-rules";
 import { readAffiliateRef } from "@/lib/affiliate-ref";
@@ -182,7 +182,7 @@ export default function CheckoutPage() {
   // Set once an order is placed: the cart empties on purpose while the page is
   // already navigating to the result page, so keep showing the loading state
   // instead of flashing the empty-cart view.
-  const orderPlacedRef = useRef(false);
+  const [orderPlaced, setOrderPlaced] = useState(false);
 
   async function handleCheckout() {
     // 鉴权尚未解析完成时不要误判为未登录，避免把已登录用户踢到登录页
@@ -258,7 +258,7 @@ export default function CheckoutPage() {
 
       // Fully paid from the wallet: nothing left to collect.
       if ((orderJson.payment_status || orderJson.data?.payment_status) === "paid") {
-        orderPlacedRef.current = true;
+        setOrderPlaced(true);
         clearCart();
         router.push(`/checkout/success?order_id=${orderId}`);
         return;
@@ -266,7 +266,7 @@ export default function CheckoutPage() {
 
       // 线下支付：不调 /api/payment/create，直接跳成功页
       if (provider !== "paypal" && provider !== "stripe") {
-        orderPlacedRef.current = true;
+        setOrderPlaced(true);
         clearCart();
         router.push(`/checkout/success?manual=1&order_id=${orderId}`);
         return;
@@ -279,12 +279,12 @@ export default function CheckoutPage() {
       const json = await res.json();
 
       if (json.data?.approvalUrl) {
-        orderPlacedRef.current = true;
+        setOrderPlaced(true);
         clearCart();
         window.location.href = json.data.approvalUrl;
       } else if (json.data?.message?.includes("Mock")) {
         // Mock mode fallback
-        orderPlacedRef.current = true;
+        setOrderPlaced(true);
         clearCart();
         router.push(`/checkout/success?mock=1&order_id=${orderId}`);
       } else {
@@ -303,7 +303,7 @@ export default function CheckoutPage() {
     { label: t("checkout.step_payment"), done: false },
   ];
 
-  if (!mounted || !methodsReady || !zonesReady || (items.length === 0 && orderPlacedRef.current)) {
+  if (!mounted || !methodsReady || !zonesReady || (items.length === 0 && orderPlaced)) {
     return (
       <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
         <div className="mb-6 h-5 w-40 animate-pulse rounded-md bg-muted" />

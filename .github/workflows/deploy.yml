@@ -19,7 +19,8 @@ jobs:
 
   e2e-test:
     name: E2E Portal Stability
-    runs-on: ubuntu-latest
+    # ubuntu-latest moved to 26.04, where the pinned Playwright cannot install Chromium.
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
 
     steps:
