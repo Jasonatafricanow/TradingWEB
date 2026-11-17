@@ -56,7 +56,7 @@ interface AvailableCoupon {
   code: string
   description: string
   discount: string
-  expires_at: string
+  expires_at: string | null
   is_used: boolean
 }
 
@@ -296,7 +296,7 @@ export default function AccountPage() {
             ) : (
               <div className="space-y-3">
                 {coupons.map((coupon) => {
-                  const daysLeft = Math.ceil((new Date(coupon.expires_at).getTime() - renderedAt) / 86400000);
+                  const daysLeft = coupon.expires_at === null ? null : Math.ceil((new Date(coupon.expires_at).getTime() - renderedAt) / 86400000);
                   return (
                     <div
                       key={coupon.id}
@@ -318,7 +318,7 @@ export default function AccountPage() {
                       <div className="text-right shrink-0">
                         <div className="flex items-center gap-1 text-xs text-muted-foreground">
                           <Clock className="h-3 w-3" />
-                          {daysLeft > 0
+                          {daysLeft === null ? (locale === "zh" ? "长期有效" : "No expiry") : daysLeft > 0
                             ? locale === "zh" ? `${daysLeft} 天后过期` : `${daysLeft}d left`
                             : locale === "zh" ? "即将过期" : "Expiring"}
                         </div>

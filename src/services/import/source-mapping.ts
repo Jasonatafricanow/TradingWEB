@@ -6,7 +6,7 @@
  * 二次同源导入靠 unique key (source, source_store, source_type, source_id) 自然 UPSERT。
  */
 import { db } from "@/lib/db";
-import { externalSourceMappings } from "@/storage/database/shared/schema";
+import { externalSourceMappings, products, productVariants } from "@/storage/database/shared/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import type { ImportSource } from "@/types/import-contract";
@@ -113,4 +113,24 @@ export async function upsertMapping(
         updated_at: new Date(),
       },
     });
+}
+
+/** Resolve live catalog rows for both the validation endpoint and the order writer. */
+export async function loadOrderCatalog(
+  source: ImportSource, store: string, productIds: string[], variantIds: string[],
+) {
+  const m = externalSourceMappings;
+  const scope = and(eq(m.source, source), eq(m.source_store, store));
+  const [productRows, variantRows] = await Promise.all([
+    productIds.length ? db.select({ sourceId: m.source_id, id: products.id, type: products.type })
+      .from(m).innerJoin(products, eq(m.local_id, products.id))
+      .where(and(scope, eq(m.source_type, "product"), eq(m.local_table, "products"), inArray(m.source_id, productIds))) : [],
+    variantIds.length ? db.select({ sourceId: m.source_id, id: productVariants.id, productId: productVariants.product_id })
+      .from(m).innerJoin(productVariants, eq(m.local_id, productVariants.id))
+      .where(and(scope, eq(m.source_type, "variant"), eq(m.local_table, "product_variants"), inArray(m.source_id, variantIds))) : [],
+  ]);
+  return {
+    products: new Map(productRows.map(p => [p.sourceId, p])),
+    variants: new Map(variantRows.map(v => [v.sourceId, v])),
+  };
 }

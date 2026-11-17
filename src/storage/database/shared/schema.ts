@@ -1,4 +1,4 @@
-import { check, mysqlTable, serial, varchar, char, text, mediumtext, timestamp, boolean, int, index, json, decimal, uniqueIndex, mysqlEnum } from "drizzle-orm/mysql-core"
+import { primaryKey, check, mysqlTable, serial, varchar, char, text, mediumtext, timestamp, boolean, int, index, json, decimal, uniqueIndex, mysqlEnum } from "drizzle-orm/mysql-core"
 import { sql } from "drizzle-orm"
 
 export const healthCheck = mysqlTable("health_check", {
@@ -1048,6 +1048,15 @@ export const productTypes = mysqlTable(
 );
 
 // ==================== 通用导入接收器 ====================
+export const importSessionImages = mysqlTable(
+	"import_session_images",
+	{
+		session_id: varchar("session_id", { length: 36 }).notNull(),
+		image_id: varchar("image_id", { length: 36 }).notNull(),
+	},
+	(table) => [primaryKey({ columns: [table.session_id, table.image_id] })]
+);
+
 export const importSessions = mysqlTable(
 	"import_sessions",
 	{

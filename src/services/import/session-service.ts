@@ -7,7 +7,7 @@
  *
  * 设计要点：
  * - import_jobs 行不在 session 创建时预插入，而是 receiver POST /products|customers|orders 时才创建
- * - mirror_progress 通过查 external_source_mappings + product_images 聚合算出（决策 1）
+ * - mirror_progress 通过查 import_session_images + product_images 聚合算出（决策 1）
  * - source_store 是字符串命名空间，不和 stores.id 关联（决策 2）
  * - 没有回滚端点（决策 3）
  */
@@ -15,12 +15,12 @@ import { db } from "@/lib/db";
 import {
   importSessions,
   importJobs,
-  externalSourceMappings,
+  importSessionImages,
   productImages,
 } from "@/storage/database/shared/schema";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
-import { ValidationError } from "@/lib/errors";
+import { NotFoundError, ValidationError } from "@/lib/errors";
 import type { AuthenticatedUser } from "@/services/auth/auth-middleware";
 import type {
   CreateImportSessionRequest,
@@ -329,8 +329,7 @@ export async function getImportSessionDetail(
     .limit(1);
   const session = sessions[0];
   if (!session) {
-    // TODO: 真 404 语义需要 NotFoundError + errorResponse 扩展；P2a 暂用 ValidationError → 400
-    throw new ValidationError(`import session not found: ${id}`);
+    throw new NotFoundError(`import session not found: ${id}`);
   }
 
   const jobs = await db
@@ -348,32 +347,15 @@ export async function getImportSessionDetail(
     errors: normalizeErrors(j.errors),
   }));
 
-  // TODO: 当前 mirror_progress 按 source_store 聚合（包含本 session_store 历史所有图）
-  //       而不是只属于本 session。要精确到 session，需要在 receiver 写 mapping 时额外打 session_id 标签。
-  //       P2a 先按 source_store 报告，规模上去再细化。
-  const imageMappings = await db
-    .select({ local_id: externalSourceMappings.local_id })
-    .from(externalSourceMappings)
-    .where(
-      and(
-        eq(externalSourceMappings.source, session.source),
-        eq(externalSourceMappings.source_store, session.source_store),
-        eq(externalSourceMappings.source_type, "image"),
-      ),
-    );
+  const counts = await db
+    .select({ mirror_status: productImages.mirror_status, cnt: sql<number>`COUNT(*)` })
+    .from(importSessionImages)
+    .innerJoin(productImages, eq(productImages.id, importSessionImages.image_id))
+    .where(eq(importSessionImages.session_id, id))
+    .groupBy(productImages.mirror_status);
 
   let mirror: MirrorProgress | undefined;
-  if (imageMappings.length > 0) {
-    const localIds = imageMappings.map((m) => m.local_id);
-    const counts = await db
-      .select({
-        mirror_status: productImages.mirror_status,
-        cnt: sql<number>`COUNT(*)`,
-      })
-      .from(productImages)
-      .where(inArray(productImages.id, localIds))
-      .groupBy(productImages.mirror_status);
-
+  if (counts.length > 0) {
     let total = 0,
       pending = 0,
       mirrored = 0,

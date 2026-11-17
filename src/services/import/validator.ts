@@ -8,7 +8,7 @@ import { isAllowedImageUrl } from "@/lib/image-url";
  * 当前实现：
  * - validateProducts：完整六维中的 products / variants / images / inventory 维度
  * - validateCustomers：邮箱格式 + 必填校验（P2c 补 cross-source 重复邮箱聚合）
- * - validateOrders：line_items 必填 + 金额格式（P2c 补 customer/product 引用完整性）
+ * - validateOrders：line_items 必填 + 金额格式；validateOrdersWithReferences 另查客户、商品和变体映射
  *
  * 设计：
  * - 不做 DB 查询（保持纯函数；schema 校验交给 receiver 在事务内做 unique 冲突时报）
@@ -23,7 +23,7 @@ import type {
   ImportRecordError,
   CustomerLinkStrategy,
 } from "@/types/import-contract";
-import { bulkFindMappings } from "./source-mapping";
+import { bulkFindMappings, loadOrderCatalog } from "./source-mapping";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const DECIMAL_REGEX = /^-?\d+(\.\d+)?$/;
@@ -538,10 +538,7 @@ export function validateOrders(
       }
     }
 
-    // TODO P2c：维度 4 + 6 跨表引用完整性
-    //   - customer_source_id 在 external_source_mappings 找得到（除非 customer_link_strategy 是 auto_create_user）
-    //   - line_items[].product_source_id / variant_source_id 在 external_source_mappings 找得到
-    //   这两项需要 DB 查询，要么在 validator 里加 db 参数，要么挪到 order-receiver 里做
+
   }
 
   return errors;
@@ -576,9 +573,8 @@ export async function validateOrdersWithReferences(
     }
   }
 
-  const [productMappings, variantMappings, customerMappings] = await Promise.all([
-    bulkFindMappings(envelope.source, envelope.source_store, "product", [...productSourceIds]),
-    bulkFindMappings(envelope.source, envelope.source_store, "variant", [...variantSourceIds]),
+  const [catalog, customerMappings] = await Promise.all([
+    loadOrderCatalog(envelope.source, envelope.source_store, [...productSourceIds], [...variantSourceIds]),
     bulkFindMappings(envelope.source, envelope.source_store, "customer", [...customerSourceIds]),
   ]);
 
@@ -611,7 +607,7 @@ export async function validateOrdersWithReferences(
 
     for (let j = 0; j < record.line_items.length; j++) {
       const item = record.line_items[j];
-      if (item.product_source_id && !productMappings.has(item.product_source_id)) {
+      if (item.product_source_id && !catalog.products.has(item.product_source_id)) {
         errors.push({
           record_index: i,
           source_id: record.source_id,
@@ -620,13 +616,14 @@ export async function validateOrdersWithReferences(
           message: `商品 ${item.product_source_id} 尚未导入`,
         });
       }
-      if (item.variant_source_id && !variantMappings.has(item.variant_source_id)) {
+      const variant = item.variant_source_id ? catalog.variants.get(item.variant_source_id) : undefined;
+      if (item.variant_source_id && (!variant || variant.productId !== catalog.products.get(item.product_source_id ?? "")?.id)) {
         errors.push({
           record_index: i,
           source_id: record.source_id,
           code: "MISSING_REFERENCE",
           field: `line_items[${j}].variant_source_id`,
-          message: `变体 ${item.variant_source_id} 尚未导入`,
+          message: `商品缺少匹配的变体 ${item.variant_source_id}`,
         });
       }
     }

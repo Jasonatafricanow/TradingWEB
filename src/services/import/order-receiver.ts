@@ -10,25 +10,24 @@
  *    否则订单导入这一条会进 errors 列表）
  * 3. variant：line_items[].variant_source_id → product_variants.id（可空）
  *
- * 性能：批次开始时一次性 bulkFindMappings 把所有 product/variant mapping 拉到内存，
+ * 性能：批次开始时批量关联查询 把所有 product/variant mapping 拉到内存，
  *       减少订单数 × 行项数的 N+1 查询。
  *
  * 已知 v1 限制：
  * - validate endpoint 默认保持轻量 pure validation；传 check_references=true 时会查 mappings 暴露商品/变体引用缺失。
  * - 重导订单（已有 mapping）时 order_items 走"先删全部再插"；删除和重插包在单条订单 transaction 内。
- * - order_items.product_type 由 products.type 预取填充，缺失时兜底 physical。
+ * - order_items.product_type 由 products.type 预取填充，缺失时拒绝该条订单。
  */
 import { db } from "@/lib/db";
 import {
   orders,
   orderItems,
-  products,
   users,
   coupons,
   importSessions,
   importJobs,
 } from "@/storage/database/shared/schema";
-import { eq, inArray } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { ValidationError } from "@/lib/errors";
 import type {
@@ -41,9 +40,8 @@ import type {
 import {
   findMapping,
   upsertMapping,
-  bulkFindMappings,
+  loadOrderCatalog,
   type DbLike,
-  type MappingLookup,
 } from "./source-mapping";
 import { validateOrders } from "./validator";
 import type { ReceiverContext } from "./product-receiver";
@@ -52,8 +50,6 @@ import { refreshImportSessionStatus } from "./session-service";
 const SOURCE_TYPE_ORDER = "order";
 const SOURCE_TYPE_ORDER_ITEM = "order_item";
 const SOURCE_TYPE_CUSTOMER = "customer";
-const SOURCE_TYPE_PRODUCT = "product";
-const SOURCE_TYPE_VARIANT = "variant";
 
 export interface OrderReceiverContext extends ReceiverContext {
   customer_link_strategy: CustomerLinkStrategy;
@@ -285,9 +281,7 @@ async function insertOrderItems(
   ctx: OrderReceiverContext,
   orderId: string,
   record: ImportOrderRecord,
-  productMappings: Map<string, MappingLookup>,
-  variantMappings: Map<string, MappingLookup>,
-  productTypes: Map<string, string>,
+  catalog: Awaited<ReturnType<typeof loadOrderCatalog>>,
   dbLike: DbLike = db,
 ): Promise<void> {
   for (let j = 0; j < record.line_items.length; j++) {
@@ -297,18 +291,21 @@ async function insertOrderItems(
         `line_items[${j}] 缺 product_source_id，无法关联本地商品`,
       );
     }
-    const productMapping = productMappings.get(item.product_source_id);
-    if (!productMapping) {
+    const product = catalog.products.get(item.product_source_id);
+    if (!product) {
       throw new ValidationError(
         `line_items[${j}] 关联的商品 ${item.product_source_id} 还没导入；请先跑 products import 再跑 orders`,
       );
     }
-    const productId = productMapping.local_id;
+    const productId = product.id;
 
     let variantId: string | null = null;
     if (item.variant_source_id) {
-      const variantMapping = variantMappings.get(item.variant_source_id);
-      if (variantMapping) variantId = variantMapping.local_id;
+      const variantMapping = catalog.variants.get(item.variant_source_id);
+      if (!variantMapping || variantMapping.productId !== productId) {
+        throw new ValidationError(`line_items[${j}] 商品缺少匹配的变体：${item.variant_source_id}`);
+      }
+      variantId = variantMapping.id;
     }
 
     const itemId = randomUUID();
@@ -319,8 +316,7 @@ async function insertOrderItems(
       product_id: productId,
       variant_id: variantId,
       product_title: item.title,
-      // TODO：反查 products 表拿真实 product_type；v1 默认 physical
-      product_type: productTypes.get(productId) ?? "physical",
+      product_type: product.type,
       sku: item.sku ?? null,
       quantity: item.quantity,
       unit_price: item.price,
@@ -384,29 +380,9 @@ export async function receiveOrders(
       if (li.variant_source_id) variantSourceIds.add(li.variant_source_id);
     }
   }
-  const productMappings = await bulkFindMappings(
-    ctx.source,
-    ctx.source_store,
-    SOURCE_TYPE_PRODUCT,
-    [...productSourceIds],
+  const catalog = await loadOrderCatalog(
+    ctx.source, ctx.source_store, [...productSourceIds], [...variantSourceIds],
   );
-  const variantMappings = await bulkFindMappings(
-    ctx.source,
-    ctx.source_store,
-    SOURCE_TYPE_VARIANT,
-    [...variantSourceIds],
-  );
-  const productIds = [...new Set([...productMappings.values()].map((m) => m.local_id))];
-  const productTypes = new Map<string, string>();
-  if (productIds.length > 0) {
-    const productRows = await db
-      .select({ id: products.id, type: products.type })
-      .from(products)
-      .where(inArray(products.id, productIds));
-    for (const p of productRows) {
-      productTypes.set(p.id, p.type);
-    }
-  }
 
   const jobId = randomUUID();
   await db.insert(importJobs).values({
@@ -446,9 +422,7 @@ export async function receiveOrders(
           ctx,
           orderId,
           record,
-          productMappings,
-          variantMappings,
-          productTypes,
+          catalog,
           tx,
         );
 

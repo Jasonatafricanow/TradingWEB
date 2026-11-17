@@ -19,6 +19,7 @@ import {
   products,
   productVariants,
   productImages,
+  importSessionImages,
   categories,
   warehouses,
   inventory,
@@ -345,51 +346,28 @@ async function syncImagesForProduct(
       source_id: imageSourceId,
     }, dbLike);
 
-    if (mapping) {
-      await dbLike
-        .update(productImages)
-        .set({
-          original_url: img.url,
-          alt: img.alt ?? null,
-          position: img.position ?? i + 1,
-        })
-        .where(eq(productImages.id, mapping.local_id));
-      await upsertMapping(
-        {
-          source: ctx.source,
-          source_store: ctx.source_store,
-          source_type: SOURCE_TYPE_IMAGE,
-          source_id: imageSourceId,
-        },
-        { table: "product_images", id: mapping.local_id },
-        img,
-        dbLike,
-      );
-      continue;
-    }
-
-    const imageId = randomUUID();
-    await dbLike.insert(productImages).values({
-      id: imageId,
-      product_id: productId,
-      src: img.url,
+    const imageId = mapping?.local_id ?? randomUUID();
+    const attributes = {
       original_url: img.url,
-      mirror_status: "pending",
       alt: img.alt ?? null,
       position: img.position ?? i + 1,
-    });
-    // 把 product 级 image_id 挂进 mapping（用作 mirror_progress 聚合定位）
+    };
+    if (mapping) {
+      await dbLike.update(productImages).set(attributes).where(eq(productImages.id, imageId));
+    } else {
+      await dbLike.insert(productImages).values({
+        ...attributes, id: imageId, product_id: productId, src: img.url, mirror_status: "pending",
+      });
+    }
     await upsertMapping(
-      {
-        source: ctx.source,
-        source_store: ctx.source_store,
-        source_type: SOURCE_TYPE_IMAGE,
-      source_id: imageSourceId,
-      },
+      { source: ctx.source, source_store: ctx.source_store, source_type: SOURCE_TYPE_IMAGE, source_id: imageSourceId },
       { table: "product_images", id: imageId },
       img,
       dbLike,
     );
+    await dbLike.insert(importSessionImages)
+      .values({ session_id: ctx.session_id, image_id: imageId })
+      .onDuplicateKeyUpdate({ set: { image_id: imageId } });
   }
 }
 

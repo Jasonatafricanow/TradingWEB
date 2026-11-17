@@ -1,6 +1,6 @@
 import { db } from '@/lib/db';
-import { eq, desc, asc } from 'drizzle-orm';
-import { orders, userMemberships, membershipTiers } from '@/storage/database/shared/schema';
+import { and, eq, desc, asc, isNull, notExists, or, lte, gte, inArray } from 'drizzle-orm';
+import { abandonedCarts, coupons, orders, userMemberships, membershipTiers } from '@/storage/database/shared/schema';
 import { sql } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import { IS_DEMO_MODE } from '@/config/constants';
@@ -10,7 +10,7 @@ interface AvailableCoupon {
   code: string;
   description: string;
   discount: string;
-  expires_at: string;
+  expires_at: string | null;
   is_used: boolean;
 }
 
@@ -179,8 +179,28 @@ const MOCK_COUPONS: AvailableCoupon[] = [
 
 export async function getUserCoupons(userId: string): Promise<AvailableCoupon[]> {
   if (IS_DEMO_MODE) {
-    return MOCK_COUPONS.filter((c) => !c.is_used && new Date(c.expires_at) > new Date());
+    return MOCK_COUPONS.filter((c) => !c.is_used && (!c.expires_at || new Date(c.expires_at) > new Date()));
   }
-  // TODO: query from DB in production
-  return [];
+  const now = new Date();
+  const rows = await db.selectDistinct({
+    id: coupons.id, code: coupons.code, description: coupons.description,
+    type: coupons.type, value: coupons.value, expires_at: coupons.expires_at,
+  }).from(abandonedCarts)
+    .innerJoin(coupons, eq(coupons.id, abandonedCarts.coupon_id))
+    .where(and(
+      eq(abandonedCarts.user_id, userId), eq(abandonedCarts.coupon_sent, true),
+      eq(coupons.is_active, true),
+      or(isNull(coupons.starts_at), lte(coupons.starts_at, now)),
+      or(isNull(coupons.expires_at), gte(coupons.expires_at, now)),
+      sql`(COALESCE(${coupons.usage_limit}, 0) = 0 OR COALESCE(${coupons.used_count}, 0) < ${coupons.usage_limit})`,
+      notExists(db.select({ id: orders.id }).from(orders).where(and(
+        eq(orders.user_id, userId), eq(orders.coupon_id, coupons.id),
+        inArray(orders.payment_status, ['paid', 'refunded', 'partially_refunded']),
+      ))),
+    )).orderBy(asc(coupons.expires_at), asc(coupons.code));
+  return rows.map((coupon) => ({
+    id: coupon.id, code: coupon.code, description: coupon.description || coupon.code,
+    discount: coupon.type === 'fixed' ? `$${coupon.value}` : `${Number(coupon.value)}%`,
+    expires_at: coupon.expires_at?.toISOString() ?? null, is_used: false,
+  }));
 }
