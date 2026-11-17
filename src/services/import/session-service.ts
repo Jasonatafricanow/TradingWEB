@@ -149,7 +149,7 @@ async function buildReconciliationSummary(
        MIN(o.currency) AS currency,
        COUNT(DISTINCT o.currency) AS currency_count
      FROM external_source_mappings m
-     INNER JOIN orders o ON m.local_table = 'orders' AND m.local_id = o.id
+     INNER JOIN orders o ON m.local_table = 'orders' AND m.local_id COLLATE utf8mb4_unicode_ci = o.id
      WHERE m.source = ? AND m.source_store = ? AND m.source_type = 'order'`,
     [session.source, session.source_store],
   );

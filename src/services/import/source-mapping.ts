@@ -7,7 +7,7 @@
  */
 import { db } from "@/lib/db";
 import { externalSourceMappings, products, productVariants } from "@/storage/database/shared/schema";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import type { ImportSource } from "@/types/import-contract";
 
@@ -121,12 +121,14 @@ export async function loadOrderCatalog(
 ) {
   const m = externalSourceMappings;
   const scope = and(eq(m.source, source), eq(m.source_store, store));
+  // Migration 0012 fixes the mapping collation; catalog tables inherit the database default.
+  const localId = sql`${m.local_id} COLLATE utf8mb4_unicode_ci`;
   const [productRows, variantRows] = await Promise.all([
     productIds.length ? db.select({ sourceId: m.source_id, id: products.id, type: products.type })
-      .from(m).innerJoin(products, eq(m.local_id, products.id))
+      .from(m).innerJoin(products, eq(localId, products.id))
       .where(and(scope, eq(m.source_type, "product"), eq(m.local_table, "products"), inArray(m.source_id, productIds))) : [],
     variantIds.length ? db.select({ sourceId: m.source_id, id: productVariants.id, productId: productVariants.product_id })
-      .from(m).innerJoin(productVariants, eq(m.local_id, productVariants.id))
+      .from(m).innerJoin(productVariants, eq(localId, productVariants.id))
       .where(and(scope, eq(m.source_type, "variant"), eq(m.local_table, "product_variants"), inArray(m.source_id, variantIds))) : [],
   ]);
   return {
